@@ -1,6 +1,6 @@
-# Methane Alert and Response Systems Matching Filters retrievals for EMIT, PRISMA and EnMAP
+# Methane Alert and Response System Matched Filters retrievals for EMIT, PRISMA and EnMAP
 
-This repository provides an implementation with [georeader](https://github.com/spaceml-org/georeader) of the matched filters methods of [Roger et al. 2024](https://doi.org/10.5194/amt-17-1333-2024) for EMIT, PRISMA and EnMAP. It also has an adaptation of [mag1c](https://github.com/markusfoote/mag1c) of [Foote et al. 2020](https://doi.org/10.1109/TGRS.2020.2976888) for EMIT.
+This repository provides an implementation with [georeader](https://github.com/spaceml-org/georeader) of the matched filters methods of [Roger et al. 2024](https://doi.org/10.5194/amt-17-1333-2024) for EMIT, PRISMA and EnMAP. It also includes an adaptation of [mag1c](https://github.com/markusfoote/mag1c) of [Foote et al. 2020](https://doi.org/10.1109/TGRS.2020.2976888) for EMIT.
 
 
 # Installation
@@ -19,7 +19,6 @@ pip install .
 
 If you use this repo please cite:
 
-
 ```
 @Article{roger_2024,
     AUTHOR = {Roger, J. and Guanter, L. and Gorro\~no, J. and Irakulis-Loitxate, I.},
@@ -31,6 +30,20 @@ If you use this repo please cite:
     PAGES = {1333--1346},
     URL = {https://amt.copernicus.org/articles/17/1333/2024/},
     DOI = {10.5194/amt-17-1333-2024}
+}
+
+@article{ruzicka_starcop_2023,
+	title = {Semantic segmentation of methane plumes with hyperspectral machine learning models},
+	volume = {13},
+	issn = {2045-2322},
+	url = {https://www.nature.com/articles/s41598-023-44918-6},
+	doi = {10.1038/s41598-023-44918-6},
+	number = {1},
+	journal = {Scientific Reports},
+	author = {Růžička, Vít and Mateo-Garcia, Gonzalo and Gómez-Chova, Luis and Vaughan, Anna, and Guanter, Luis and Markham, Andrew},
+	month = nov,
+	year = {2023},
+	pages = {19999}
 }
 
 @ARTICLE{foote_2020,
