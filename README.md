@@ -1,4 +1,4 @@
-# Methane Alert and Response Systems Matched Filters retrievals for EMIT, PRISMA and EnMAP
+# Methane Alert and Response System Matched Filters retrievals for EMIT, PRISMA and EnMAP
 
 This repository provides an implementation with [georeader](https://github.com/spaceml-org/georeader) of the matched filters methods of [Roger et al. 2024](https://doi.org/10.5194/amt-17-1333-2024) for EMIT, PRISMA and EnMAP. It also includes an adaptation of [mag1c](https://github.com/markusfoote/mag1c) of [Foote et al. 2020](https://doi.org/10.1109/TGRS.2020.2976888) for EMIT.
 
