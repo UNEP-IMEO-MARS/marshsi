@@ -123,7 +123,6 @@ def AT_Combo_MF_2(mf_extended, mf_classic):
     return mf_combo
 
 
-# retrieval_roger_lars.py
 def AT_MF_select_window_alt(img: NDArray, target_spectrum: NDArray) -> NDArray:
     """
     Vanila matching filter.
@@ -153,29 +152,132 @@ def AT_MF_select_window_alt(img: NDArray, target_spectrum: NDArray) -> NDArray:
 
     for i in range(W):
         a = img[:, i, 0]
-        idxs_notnan = np.where(~np.isnan(a))[0]
-        size_idxs = len(idxs_notnan)
-        ones_array = np.ones((size_idxs, B))
+        idxs_notnan = ~np.isnan(a)
 
-        col_notnan = img[idxs_notnan, i]
-        mu = np.nanmean(col_notnan, axis=0)
-        mu_array = ones_array * mu
+        col_notnan = img[idxs_notnan, i] # (H', B)
 
-        if len(target_spectrum.shape) == 2:
-            t = mu * target_spectrum[i]
-        else:
-            t = mu * target_spectrum
-
-        try:  # SVD error viene probablemente por una escasa estadistica (muchos NaN). Hacemos la columna = 0.
-            cov = np.cov(col_notnan, rowvar=False)
-            cov_inv = np.linalg.pinv(cov)
-
-            num = np.dot(np.dot((col_notnan - mu_array), cov_inv), t)
-            den = np.dot(np.dot(t, cov_inv), t)
-
-            MF[idxs_notnan, i] = num / den
-
-        except:
-            continue
-
+        target_spectrum_i = target_spectrum[i] if len(target_spectrum.shape) == 2 else target_spectrum
+        MF[idxs_notnan, i] = compute_mf_standard(col_notnan, target_spectrum_i)
+        
     return MF
+
+
+def compute_mf_standard(col_notnan: NDArray, target_spectrum: NDArray) -> NDArray:
+    """
+    Standard implementation of Roger et al. 2024's matching filter:
+     mf = (x - µ)^T Σ^(-1) t / (t^T Σ^(-1) t)
+
+
+    Args:
+        col_notnan (NDArray): 2D array of shape (H', B) where H' is the number of rows with valid values and B is the number of bands.
+        target_spectrum (NDArray): 1D array of shape (B,) representing the target spectrum.
+
+    Returns:
+        NDArray: 1D array of shape (H',) representing the matching filter response.
+    """
+    mu = np.nanmean(col_notnan, axis=0, keepdims=True) # (1, B)
+    t = mu[0] * target_spectrum
+    cov = np.cov(col_notnan, rowvar=False)
+    X = col_notnan - mu  # X is the centered data matrix
+    cov_inv = np.linalg.pinv(cov)
+
+    cov_inv_reg_times_t = cov_inv @ t
+
+    num = X @ cov_inv_reg_times_t
+    den = t @ cov_inv_reg_times_t
+    return num / den 
+
+
+def compute_mf_reg1(col_notnan: NDArray, target_spectrum: NDArray, 
+                    lambda_reg:float=0) -> NDArray:
+    """
+    Regularized implementation matching filter.
+
+    This implementation is similar to the one implemented in mag1c. 
+
+    Instead of inverting the covariance matrix directly, it uses SVD to compute the 
+    regularized inverse of the covariance matrix Σ:
+    
+    Σ = U * diag(S) * V^T # Singular Value Decomposition of Σ
+    (Σ + λI)^(-1) = V * diag(1 / (S + λ)) * V^T
+
+    The final filter response is computed as:
+     mf = (x - µ)^T (Σ + λI)^(-1) t
+
+    Args:
+        col_notnan (NDArray): 2D array of shape (H', B) where H' is the number of rows with valid values and B is the number of bands.
+        target_spectrum (NDArray): 1D array of shape (B,) representing the target spectrum.
+        lambda_reg (float, optional): Regularization parameter. Defaults to 0.
+
+    Returns:
+        NDArray: 1D array of shape (H',) representing the matching filter response.
+    """
+    mu = np.nanmean(col_notnan, axis=0, keepdims=True) # (1, B)
+    t = mu[0] * target_spectrum
+    cov = np.cov(col_notnan, rowvar=False)
+    X = col_notnan - mu  # X is the centered data matrix
+    U, S, Vt = np.linalg.svd(cov)
+
+    S_inv_reg = np.diag(1. / (S + lambda_reg))  # Inverse with regularization
+
+    # Step 4: Compute the inverse of the covariance matrix using the regularized SVD
+    cov_inv_reg = Vt.T @ S_inv_reg @ U.T  # Regularized inverse via SVD
+
+    cov_inv_reg_times_t = cov_inv_reg @ t
+
+    # Step 5: Compute the numerator (x * A^T A + lambda I)^{-1} t
+    num = X @ cov_inv_reg_times_t
+
+    # Step 6: Compute the denominator (t^T (A^T A + lambda I)^{-1} t)
+    den = t @ cov_inv_reg_times_t
+    
+    return num / den 
+
+def compute_mf_reg2(col_notnan: NDArray, target_spectrum: NDArray, 
+                    lambda_reg:float=0) -> NDArray:
+    """
+    Regularized implementation matching filter. This is matematically equivalent to compute_mf_reg1, but uses a different approach:
+
+    Instead of inverting the covariance matrix directly, it uses SVD on the centered data matrix X 
+    to compute the regularized inverse of the covariance matrix Σ. If X is the centered data matrix, then:
+    X = U * diag(S) * V^T # Singular Value Decomposition of X
+    (1/(M-1) * X^T X + λI)^(-1) = (M-1) V * diag(1 / (S^2 + λ)) * V^T
+
+    The final filter response is computed as:
+        mf = (x - µ)^T (1/(M-1) * X^T X + λI)^(-1) t
+
+    Args:
+        col_notnan (NDArray): 2D array of shape (H', B) where H' is the number of rows with valid values and B is the number of bands.
+        target_spectrum (NDArray): 1D array of shape (B,) representing the target spectrum.
+        lambda_reg (float, optional): Regularization parameter. Defaults to 0.
+
+    Returns:
+        NDArray: 1D array of shape (H',) representing the matching filter response.
+    """
+    
+    mu = np.nanmean(col_notnan, axis=0, keepdims=True) # (1, B)
+    t = mu[0] * target_spectrum
+    
+    X = col_notnan - mu  # X is the centered data matrix
+
+    # Step 2: Perform SVD on the centered data matrix X
+    _, S, Vt = np.linalg.svd(X, full_matrices=False)
+    
+    # Step 3: Add regularization to the squared singular values (S)
+    S_squared_inv_reg = np.diag(1. / (S**2 + lambda_reg))  # Regularized inverse of S^2
+    
+    # Step 4: Compute the regularized inverse of X^T X using SVD
+    # (Note: X^T X = V S^2 V^T, so we use the regularized inverse of S^2)
+    M = X.shape[0]
+    Sigma_inv_reg =  (M - 1) * Vt.T @ S_squared_inv_reg @ Vt  # Regularized inverse of 1/m X^T X
+
+    # Step 5: (1/(M-1) * X^T X + lambda I)^{-1} t
+    Sigma_inv_reg_times_t = Sigma_inv_reg @ t
+    
+    # Step 6: Compute the numerator (x * (1/(M-1) X^T X + lambda I)^{-1} t)
+    num = X @ Sigma_inv_reg_times_t  # This step is equivalent to your numerator computation
+
+    # Step 7: Compute the denominator (t^T (X^T X + lambda I)^{-1} t)
+    den = t @ Sigma_inv_reg_times_t
+    
+    return num / den 
