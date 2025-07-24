@@ -11,9 +11,9 @@ pip install .
 
 ## Examples
 
-* EMIT example 👉 [emit_example.ipynb](./notebooks/emit_example.ipynb)
-* PRISMA example 👉 [prisma_example.ipynb](./notebooks/prisma_example.ipynb)
-* EnMAP example 👉 [enmap_example.ipynb](./notebooks/enmap_example.ipynb)
+* EMIT example 👉 [emit_example.ipynb](./notebooks/emit_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/spaceml-org/mars_mf/blob/main/notebooks/emit_example.ipynb)
+* PRISMA example 👉 [prisma_example.ipynb](./notebooks/prisma_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/spaceml-org/mars_mf/blob/main/notebooks/prisma_example.ipynb)
+* EnMAP example 👉 [enmap_example.ipynb](./notebooks/enmap_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/spaceml-org/mars_mf/blob/main/notebooks/enmap_example.ipynb)
 
 ## Citation
 
