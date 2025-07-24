@@ -1,0 +1,73 @@
+docs_dir: .
+
+site_name: mars_mf
+repo_url: https://github.com/UNEP-IMEO-MARS/mars_mf
+site_url: https://UNEP-IMEO-MARS.github.io/mars_mf
+site_description: 🛰️ CloudSEN12 models
+site_author: Gonzalo Mateo-García
+edit_uri: edit/main/docs/
+repo_name: mars_mf
+use_directory_urls: false
+
+# Configuration
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: default
+      primary: '#d49f0c'
+      accent: '#d49f0c'
+      toggle:
+        icon: material/toggle-switch-off-outline
+        name: Switch to dark mode
+    - scheme: slate
+      primary: '#201357'
+      accent: white
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  logo: notebooks/logo.webp
+  favicon: notebooks/logo.webp
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.top
+    - navigation.expand
+    - navigation.indexes
+    - header.autohide   
+
+
+nav:
+  - Home: 
+    - README.md
+  - Tutorials:
+    - Matched filters for EMIT: notebooks/emit_example.ipynb
+    - Matched filters for PRISMA: notebooks/prisma_example.ipynb
+    - Matched filters for EnMAP: notebooks/enmap_example.ipynb
+
+# Plugins
+plugins:
+  - search
+  - same-dir
+  - awesome-pages
+  - mkdocstrings
+  - mknotebooks:
+      execute: false
+      timeout: 100
+      allow_errors: false
+
+markdown_extensions:
+  - meta
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.pathconverter
+  - pymdownx.tabbed
+  - mdx_truly_sane_lists
+  - pymdownx.tasklist
+
+extra_css:
+  - assets/style.css
