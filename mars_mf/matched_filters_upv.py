@@ -125,12 +125,14 @@ def AT_Combo_MF_2(mf_extended, mf_classic):
 
 def AT_MF_select_window_alt(img: NDArray, target_spectrum: NDArray) -> NDArray:
     """
-    Vanila matching filter.
+    Vanilla matching filter implementation by column.
 
     Args:
         img (NDArray): image of shape (H, W, B) where H is the height, W is the width (number of columns) and B is the number of bands.
             Invalid values must be np.nan.
         target_spectrum (NDArray): target spectrum of shape (B,) or (W, B) where B is the number of bands and W is the number of columns.
+            For EnMAP and EMIT it is a 1D array but for PRISMA it is 2D because there're slight changes in the wavelengths for each column
+            (this seems to be because of the SMILE effect?)
 
     Returns:
         NDArray: matching filter of shape (H, W) where H is the height and W is the width (number of columns).
