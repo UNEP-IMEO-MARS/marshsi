@@ -144,7 +144,7 @@ def MF_sunglint_combo_enmap(enmapi: enmap.EnMAP, logger: Optional[logging.Logger
 
 def MF_sunglint_combo_prisma(
     pi: prisma.PRISMA,
-    logger: logging.Logger,
+    logger: Optional[logging.Logger]=None,
     mask_flag: bool = False,
     umbral_mask: float = 0.05,
 ) -> GeoTensor:

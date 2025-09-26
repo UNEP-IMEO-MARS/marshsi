@@ -21,7 +21,7 @@ If you use this repo please cite:
 
 ```
 @Article{roger_2024,
-    AUTHOR = {Roger, J. and Guanter, L. and Gorro\~no, J. and Irakulis-Loitxate, I.},
+    AUTHOR = {Roger, J. and Guanter, L. and Gorroño, J. and Irakulis-Loitxate, I.},
     TITLE = {Exploiting the entire near-infrared spectral range to improve the detection of methane plumes with high-resolution imaging spectrometers},
     JOURNAL = {Atmospheric Measurement Techniques},
     VOLUME = {17},
