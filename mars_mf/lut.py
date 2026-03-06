@@ -27,7 +27,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy import interpolate
 
-from marsml.utils.io import safe_open_netcdf
+from georeader.io import safe_open_netcdf
 
 # Default LUT file path
 FILE_LUT_GAS = os.path.join(os.path.dirname(__file__), "output_Tch4_LUT_AMF_VZA_0_v2.nc")
