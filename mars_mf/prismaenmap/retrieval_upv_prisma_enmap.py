@@ -17,6 +17,7 @@ from mars_mf.matched_filters_upv import (
     read_luts,
     MAX_AMF
 )
+from ..lut import air_mass_factor
 
 BAND_NAMES_COMBO = [
     "Rad_out",
@@ -54,7 +55,7 @@ def target_spectrum_prisma(pi: prisma.PRISMA, swir_flag: bool) -> NDArray:
         fwhm_array = pi.fwhm_vnir
         N, M, B = pi.ltoa_vnir.shape
 
-    amf = 1.0 / np.cos(vza * np.pi / 180) + 1.0 / np.cos(sza * np.pi / 180)
+    amf = air_mass_factor(sza=sza, vza=vza)
 
     if amf > MAX_AMF:
         logging.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
@@ -76,7 +77,7 @@ def target_spectrum_prisma(pi: prisma.PRISMA, swir_flag: bool) -> NDArray:
 
 
 def target_spectrum_enmap(enmapi: enmap.EnMAP) -> NDArray:
-    amf = 1.0 / np.cos(enmapi.vza * np.pi / 180) + 1.0 / np.cos(enmapi.sza * np.pi / 180)
+    amf = air_mass_factor(sza=enmapi.sza, vza=enmapi.vza)
     if amf > MAX_AMF:
         logging.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
         amf = MAX_AMF

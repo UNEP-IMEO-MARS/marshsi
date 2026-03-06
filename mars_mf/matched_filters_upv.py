@@ -3,16 +3,15 @@
 # Exploiting the entire near-infrared spectral range to improve the detection of methane plumes with high-resolution imaging spectrometers, 
 # Atmos. Meas. Tech., 17, 1333–1346, https://doi.org/10.5194/amt-17-1333-2024, 2024.
 
-import os
-
-import netCDF4
 import numpy as np
 from numpy.typing import NDArray
-from scipy import interpolate
 
-FILE_LUT_GAS = os.path.join(os.path.dirname(__file__), "output_Tch4_LUT_AMF_VZA_0_v2.nc")
+from . import lut
 
-MAX_AMF = 3.92  # Maximum AMF for PRISMA and EnMAP, used to avoid issues with the LUTs
+# Import constants from lut module
+FILE_LUT_GAS = lut.FILE_LUT_GAS
+MAX_AMF = lut.MAX_AMF # Maximum AMF for PRISMA and EnMAP, used to avoid issues with the LUTs
+read_luts = lut.read_luts
 
 # Adapta el espectro de k a la respuesta espectral de PRISMA. Devuelve espectro de k ajustada a las bandas
 def np_where(wvl_M, wvl, wl_resol, bd):
@@ -85,28 +84,6 @@ def generate_filter(wvl_M, wvl, wl_resol):
             s_norm_M[li1, bd] = norm_s(s)
 
     return s_norm_M
-
-
-def read_luts(amf, file_lut: str = FILE_LUT_GAS):
-    nc_lut = netCDF4.Dataset(file_lut, "r", format="NETCDF4")
-
-    wvl_mod = np.array(nc_lut.variables["wvl_mod"])
-
-    tmp = nc_lut.variables["t_ch4_arr"]
-    t_arr = np.copy(tmp).T
-
-    tmp = np.array(nc_lut.variables["mr_ch4_arr"])
-    mr_arr_all = np.copy(tmp).T
-
-    amf_arr = np.array(nc_lut.variables["amf_arr"])
-
-    f_t = interpolate.interp1d(amf_arr, t_arr, axis=0)
-    f_mr = interpolate.interp1d(amf_arr, mr_arr_all, axis=0)
-
-    t_arr = f_t(amf)
-    mr_arr = f_mr(amf)
-
-    return wvl_mod, t_arr, mr_arr
 
 
 def AT_Combo_MF_2(mf_extended, mf_classic):
