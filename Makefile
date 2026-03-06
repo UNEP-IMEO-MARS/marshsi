@@ -8,6 +8,10 @@ install: ## Install the poetry environment and install the pre-commit hooks
 test: ## Run tests
 	@poetry run pytest -v
 
+.PHONY: test-notebooks
+test-notebooks: ## Run notebook integration tests (requires MARS_MF_TEST_DATA=1 and data files)
+	@MARS_MF_TEST_DATA=1 poetry run pytest --nbmake docs/*_example.ipynb -v --nbmake-timeout=600
+
 .PHONY: lint
 lint: ## Run linters
 	@poetry run ruff check mars_mf tests
