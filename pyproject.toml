@@ -26,6 +26,7 @@ tqdm = ">=4"
 spectral = "^0.24"
 pysolar = "^0.13"
 xarray = ">=2026.2"
+h5netcdf = "^1.8.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.0"
