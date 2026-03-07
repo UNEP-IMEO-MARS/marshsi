@@ -165,7 +165,4 @@ notebooks/
 #.idea/
 
 # Large satellite data files used by example notebooks
-docs/*.nc
-docs/PRISMA/
-docs/EnMAP/
-docs/EMIT_*
+tests/data/
