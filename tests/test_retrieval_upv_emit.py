@@ -1,5 +1,5 @@
 """
-Tests for mars_mf.emit.retrieval_upv_emit module.
+Tests for marshsi.emit.retrieval_upv_emit module.
 
 Tests cover:
 - load_target_spectrum_mf (target spectrum loading)
@@ -76,25 +76,25 @@ class TestModuleConstants:
 
     def test_extended_wavelength_range(self):
         """Test EXTENDED_WAVELENGTH_RANGE constant."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         assert ret.EXTENDED_WAVELENGTH_RANGE == (975, 2_445)
 
     def test_classic_wavelength_range(self):
         """Test CLASSIC_WAVELENGTH_RANGE constant."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         assert ret.CLASSIC_WAVELENGTH_RANGE == (2_100, 2_445)
 
     def test_rad_wavelength(self):
         """Test RAD_WAVELENGTH constant."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         assert ret.RAD_WAVELENGTH == 2_100
 
     def test_periods_exclude_water(self):
         """Test PERIODS_EXCLUDE_WATER constant."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         assert len(ret.PERIODS_EXCLUDE_WATER) > 0
         assert (1260, 1330) in ret.PERIODS_EXCLUDE_WATER
@@ -108,7 +108,7 @@ class TestExtendedBoolWavelengths:
 
     def test_extended_bool_basic(self, sample_wavelengths):
         """Test basic wavelength selection."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         result = ret.extended_bool_wavelengths(sample_wavelengths)
 
@@ -117,7 +117,7 @@ class TestExtendedBoolWavelengths:
 
     def test_extended_bool_range_selection(self, sample_wavelengths):
         """Test that wavelengths in range are selected."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         result = ret.extended_bool_wavelengths(sample_wavelengths)
 
@@ -133,7 +133,7 @@ class TestExtendedBoolWavelengths:
 
     def test_extended_bool_excludes_water_bands(self, sample_wavelengths):
         """Test that water absorption bands are excluded."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         result = ret.extended_bool_wavelengths(sample_wavelengths)
 
@@ -147,7 +147,7 @@ class TestExtendedBoolWavelengths:
 
     def test_extended_bool_custom_range(self, sample_wavelengths):
         """Test with custom wavelength range."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         custom_range = (1500, 2000)
         result = ret.extended_bool_wavelengths(
@@ -163,7 +163,7 @@ class TestExtendedBoolWavelengths:
 
     def test_extended_bool_empty_range(self, sample_wavelengths):
         """Test with range outside wavelength array."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         # Range completely outside the wavelength array
         result = ret.extended_bool_wavelengths(
@@ -181,7 +181,7 @@ class TestLoadTargetSpectrumMF:
 
     def test_load_target_spectrum_returns_array(self, mock_emit_image):
         """Test that load_target_spectrum_mf returns an array."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         result = ret.load_target_spectrum_mf(mock_emit_image)
 
@@ -190,7 +190,7 @@ class TestLoadTargetSpectrumMF:
 
     def test_load_target_spectrum_finite_values(self, mock_emit_image):
         """Test that returned spectrum has finite values."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         result = ret.load_target_spectrum_mf(mock_emit_image)
 
@@ -198,7 +198,7 @@ class TestLoadTargetSpectrumMF:
 
     def test_load_target_spectrum_high_amf_warning(self, mock_emit_image):
         """Test warning is logged for high AMF values."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         # Set extreme angles that result in high AMF
         mock_emit_image.mean_sza = 80.0
@@ -218,7 +218,7 @@ class TestATMFTotalEMIT:
 
     def test_at_mf_total_emit_returns_tuple(self, mock_emit_image):
         """Test that AT_MF_total_EMIT returns a tuple of 5 elements."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         result = ret.AT_MF_total_EMIT(mock_emit_image)
 
@@ -228,7 +228,7 @@ class TestATMFTotalEMIT:
     def test_at_mf_total_emit_geotensor_outputs(self, mock_emit_image):
         """Test that outputs are GeoTensors."""
         from georeader.geotensor import GeoTensor
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         mf_classic, mf_extended, mf_combo, mf_filtered, rad = ret.AT_MF_total_EMIT(mock_emit_image)
 
@@ -240,7 +240,7 @@ class TestATMFTotalEMIT:
 
     def test_at_mf_total_emit_same_shape_outputs(self, mock_emit_image):
         """Test that all outputs have the same shape."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         mf_classic, mf_extended, mf_combo, mf_filtered, rad = ret.AT_MF_total_EMIT(mock_emit_image)
 
@@ -251,7 +251,7 @@ class TestATMFTotalEMIT:
 
     def test_at_mf_total_emit_with_water_mask(self, mock_emit_image):
         """Test AT_MF_total_EMIT with water masking enabled."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         result = ret.AT_MF_total_EMIT(mock_emit_image, mask_water=True)
 
@@ -259,7 +259,7 @@ class TestATMFTotalEMIT:
 
     def test_at_mf_total_emit_custom_fill_value(self, mock_emit_image):
         """Test AT_MF_total_EMIT with custom fill value."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         custom_fill = -999.0
         mf_classic, mf_extended, mf_combo, mf_filtered, rad = ret.AT_MF_total_EMIT(
@@ -270,7 +270,7 @@ class TestATMFTotalEMIT:
 
     def test_at_mf_total_emit_custom_wavelength_ranges(self, mock_emit_image):
         """Test AT_MF_total_EMIT with custom wavelength ranges."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         custom_extended = (1000, 2400)
         custom_classic = (2100, 2400)
@@ -285,7 +285,7 @@ class TestATMFTotalEMIT:
 
     def test_at_mf_total_emit_with_logger(self, mock_emit_image):
         """Test AT_MF_total_EMIT with logger."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         mock_logger = MagicMock()
 
@@ -304,7 +304,7 @@ class TestIntegration:
 
     def test_wavelength_consistency(self, sample_wavelengths):
         """Test that wavelength selection is consistent."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         extended_mask = ret.extended_bool_wavelengths(sample_wavelengths)
         extended_wavelengths = sample_wavelengths[extended_mask]
@@ -318,7 +318,7 @@ class TestIntegration:
 
     def test_matching_filter_output_range(self, mock_emit_image):
         """Test that matching filter outputs are in reasonable range."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         mf_classic, mf_extended, mf_combo, mf_filtered, rad = ret.AT_MF_total_EMIT(mock_emit_image)
 
@@ -333,7 +333,7 @@ class TestIntegration:
 
     def test_target_spectrum_shape_matches_wavelengths(self, mock_emit_image):
         """Test that target spectrum has correct shape."""
-        from mars_mf.emit import retrieval_upv_emit as ret
+        from marshsi.emit import retrieval_upv_emit as ret
 
         k_arr = ret.load_target_spectrum_mf(mock_emit_image)
 

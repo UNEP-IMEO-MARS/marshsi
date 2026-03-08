@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from georeader.geotensor import GeoTensor
-from mars_mf.quantification import (
+from marshsi.quantification import (
     A_UEFF_S2,
     ATMOSPHERE_HEIGHT_METHANE,
     B_UEFF_S2,

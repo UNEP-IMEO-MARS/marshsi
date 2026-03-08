@@ -1,10 +1,10 @@
-site_name: mars_mf
-repo_url: https://github.com/UNEP-IMEO-MARS/mars_mf
-site_url: https://UNEP-IMEO-MARS.github.io/mars_mf
+site_name: marshsi
+repo_url: https://github.com/UNEP-IMEO-MARS/marshsi
+site_url: https://UNEP-IMEO-MARS.github.io/marshsi
 site_description: 🛰️ Matched Filters retrievals for EMIT, PRISMA and EnMAP
 site_author: Gonzalo Mateo-García
 edit_uri: edit/main/docs/
-repo_name: mars_mf
+repo_name: marshsi
 
 nav:
   - Home: index.md
@@ -59,7 +59,7 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/UNEP-IMEO-MARS/mars_mf
+      link: https://github.com/UNEP-IMEO-MARS/marshsi
 
 markdown_extensions:
   - meta

@@ -9,7 +9,7 @@ from loguru import logger
 from numpy.typing import NDArray
 from scipy.signal import medfilt2d
 
-from mars_mf.matched_filters_upv import (
+from marshsi.matched_filters_upv import (
     AT_Combo_MF_2,
     AT_MF_select_window_alt,
     calc_jac_rad,

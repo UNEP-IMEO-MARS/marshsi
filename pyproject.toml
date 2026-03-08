@@ -1,18 +1,18 @@
 [tool.poetry]
-name = "mars_mf"
+name = "marshsi"
 version = "0.1"
 description = "🛰️ Matched filters for hyperspectral methane retrieval"
 authors = ["Gonzalo Mateo-García"]
-repository = "https://github.com/UNEP-IMEO-MARS/mars_mf"
-documentation = "https://UNEP-IMEO-MARS.github.io/mars_mf/"
+repository = "https://github.com/UNEP-IMEO-MARS/marshsi"
+documentation = "https://UNEP-IMEO-MARS.github.io/marshsi/"
 readme = "README.md"
 license = "	LGPL-3.0"
 packages = [
-  {include = "mars_mf"}
+  {include = "marshsi"}
 ]
-include = ["mars_mf/output_Tch4_LUT_AMF_VZA_0_v2.nc",
-           "mars_mf/emit/ch4.hdr", 
-           "mars_mf/emit/ch4.lut"]
+include = ["marshsi/output_Tch4_LUT_AMF_VZA_0_v2.nc",
+           "marshsi/emit/ch4.hdr", 
+           "marshsi/emit/ch4.lut"]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"

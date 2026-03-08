@@ -14,7 +14,7 @@ test-notebooks: ## Run notebook integration tests (requires data files in tests/
 
 .PHONY: lint
 lint: ## Run linters
-	@poetry run ruff check mars_mf tests
+	@poetry run ruff check marshsi tests
 
 .PHONY: check
 check: ## Run code quality tools.

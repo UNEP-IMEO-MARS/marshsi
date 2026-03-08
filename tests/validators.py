@@ -1,5 +1,5 @@
 """
-Shared assertion helpers for mars_mf tests.
+Shared assertion helpers for marshsi tests.
 
 These are plain functions (not pytest fixtures) that bundle repeated
 assertion patterns into single calls with clear error messages.

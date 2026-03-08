@@ -1,5 +1,5 @@
 """
-Pytest configuration for mars_mf tests.
+Pytest configuration for marshsi tests.
 
 This file contains pytest hooks and fixtures shared across all test modules.
 """

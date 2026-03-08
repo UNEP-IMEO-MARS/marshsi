@@ -1,11 +1,11 @@
-"""Tests for mars_mf.lut module."""
+"""Tests for marshsi.lut module."""
 
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import xarray as xr
-from mars_mf.lut import (
+from marshsi.lut import (
     FILE_LUT_GAS,
     MAX_AMF,
     air_mass_factor,
@@ -78,76 +78,76 @@ class TestAirMassFactor:
 
 
 class TestLoadAllLut:
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_returns_tuple_of_six_arrays(self, mock_open):
         mock_open.return_value = _create_mock_lut_dataset()
         result = load_all_lut()
         assert isinstance(result, tuple)
         assert len(result) == 6
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_wvl_mod_shape(self, mock_open):
         n_model_wvl = 7
         mock_open.return_value = _create_mock_lut_dataset(n_model_wvl=n_model_wvl)
         wvl_mod, _, _, _, _, _ = load_all_lut()
         assert wvl_mod.shape == (n_model_wvl,)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_t_ch4_arr_shape_is_transposed(self, mock_open):
         n_model_wvl = 5; n_amf = 4; n_mr = 6
         mock_open.return_value = _create_mock_lut_dataset(n_model_wvl=n_model_wvl, n_amf=n_amf, n_mr=n_mr)
         _, t_ch4_arr, _, _, _, _ = load_all_lut()
         assert t_ch4_arr.shape == (n_amf, n_mr, n_model_wvl)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_mr_ch4_arr_shape_is_transposed(self, mock_open):
         n_amf = 4; n_mr = 6
         mock_open.return_value = _create_mock_lut_dataset(n_amf=n_amf, n_mr=n_mr)
         _, _, mr_ch4_arr, _, _, _ = load_all_lut()
         assert mr_ch4_arr.shape == (n_amf, n_mr)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_amf_arr_shape(self, mock_open):
         n_amf = 4
         mock_open.return_value = _create_mock_lut_dataset(n_amf=n_amf)
         _, _, _, amf_arr, _, _ = load_all_lut()
         assert amf_arr.shape == (n_amf,)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_eg_arr_shape(self, mock_open):
         n_model_wvl = 7
         mock_open.return_value = _create_mock_lut_dataset(n_model_wvl=n_model_wvl)
         _, _, _, _, eg_arr, _ = load_all_lut()
         assert eg_arr.shape == (n_model_wvl,)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_trans_tot_arr_shape(self, mock_open):
         n_model_wvl = 7
         mock_open.return_value = _create_mock_lut_dataset(n_model_wvl=n_model_wvl)
         _, _, _, _, _, trans_tot_arr = load_all_lut()
         assert trans_tot_arr.shape == (n_model_wvl,)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_eg_is_sum_of_edir_and_ediff(self, mock_open):
         mock_ds = _create_mock_lut_dataset(n_model_wvl=5, n_source_wvl=100)
         mock_open.return_value = mock_ds
         wvl_mod, _, _, _, eg_arr, _ = load_all_lut()
         assert np.all(eg_arr >= 0)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_uses_default_file_path(self, mock_open):
         mock_open.return_value = _create_mock_lut_dataset()
         load_all_lut()
         mock_open.assert_called_once_with(FILE_LUT_GAS, cache=False, load=True)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_uses_custom_file_path(self, mock_open):
         mock_open.return_value = _create_mock_lut_dataset()
         custom_path = "/custom/path/lut.nc"
         load_all_lut(lut_file=custom_path)
         mock_open.assert_called_once_with(custom_path, cache=False, load=True)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_all_arrays_are_numpy(self, mock_open):
         mock_open.return_value = _create_mock_lut_dataset()
         result = load_all_lut()
@@ -156,48 +156,48 @@ class TestLoadAllLut:
 
 
 class TestReadLuts:
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_returns_tuple_of_three_arrays(self, mock_open):
         mock_open.return_value = _create_mock_lut_dataset()
         result = read_luts(amf=2.5)
         assert isinstance(result, tuple)
         assert len(result) == 3
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_wvl_mod_shape(self, mock_open):
         n_model_wvl = 7
         mock_open.return_value = _create_mock_lut_dataset(n_model_wvl=n_model_wvl)
         wvl_mod, _, _ = read_luts(amf=2.5)
         assert wvl_mod.shape == (n_model_wvl,)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_t_arr_shape_after_interpolation(self, mock_open):
         n_model_wvl = 5; n_mr = 6
         mock_open.return_value = _create_mock_lut_dataset(n_model_wvl=n_model_wvl, n_mr=n_mr)
         _, t_arr, _ = read_luts(amf=2.5)
         assert t_arr.shape == (n_mr, n_model_wvl)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_mr_arr_shape_after_interpolation(self, mock_open):
         n_mr = 6
         mock_open.return_value = _create_mock_lut_dataset(n_mr=n_mr)
         _, _, mr_arr = read_luts(amf=2.5)
         assert mr_arr.shape == (n_mr,)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_uses_default_file_path(self, mock_open):
         mock_open.return_value = _create_mock_lut_dataset()
         read_luts(amf=2.5)
         mock_open.assert_called_once_with(FILE_LUT_GAS, cache=False, load=True)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_uses_custom_file_path(self, mock_open):
         mock_open.return_value = _create_mock_lut_dataset()
         custom_path = "/custom/path/lut.nc"
         read_luts(amf=2.5, file_lut=custom_path)
         mock_open.assert_called_once_with(custom_path, cache=False, load=True)
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_interpolation_at_exact_amf_value(self, mock_open):
         n_amf = 4
         mock_ds = _create_mock_lut_dataset(n_amf=n_amf)
@@ -206,7 +206,7 @@ class TestReadLuts:
         assert t_arr is not None
         assert mr_arr is not None
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_interpolation_between_amf_values(self, mock_open):
         mock_ds = _create_mock_lut_dataset(n_amf=4)
         mock_open.return_value = mock_ds
@@ -214,7 +214,7 @@ class TestReadLuts:
         assert t_arr is not None
         assert mr_arr is not None
 
-    @patch("mars_mf.lut.safe_open_netcdf")
+    @patch("marshsi.lut.safe_open_netcdf")
     def test_all_arrays_are_numpy(self, mock_open):
         mock_open.return_value = _create_mock_lut_dataset()
         result = read_luts(amf=2.5)
