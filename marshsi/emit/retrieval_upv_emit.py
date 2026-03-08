@@ -10,7 +10,7 @@ from scipy.signal import medfilt2d
 
 logger = logging.getLogger(__name__)
 
-from mars_mf.matched_filters_upv import (
+from marshsi.matched_filters_upv import (
     AT_Combo_MF_2,
     AT_MF_select_window_alt,
     calc_jac_rad,
@@ -18,13 +18,11 @@ from mars_mf.matched_filters_upv import (
     read_luts,
     MAX_AMF,
 )
+from ..lut import air_mass_factor
 
 
 def load_target_spectrum_mf(emit_image: emit.EMITImage) -> NDArray:
-    logger.warning(f"VZA: {emit_image.mean_vza}, SZA: {emit_image.mean_sza}")
-    amf = 1.0 / np.cos(emit_image.mean_vza * np.pi / 180) + 1.0 / np.cos(
-        emit_image.mean_sza * np.pi / 180
-    )
+    amf = air_mass_factor(sza=emit_image.mean_sza, vza=emit_image.mean_vza)
     if amf > MAX_AMF:
         logger.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
         amf = MAX_AMF

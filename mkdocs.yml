@@ -1,73 +1,77 @@
-docs_dir: .
-
-site_name: mars_mf
-repo_url: https://github.com/UNEP-IMEO-MARS/mars_mf
-site_url: https://UNEP-IMEO-MARS.github.io/mars_mf
-site_description: 🛰️ CloudSEN12 models
+site_name: marshsi
+repo_url: https://github.com/UNEP-IMEO-MARS/marshsi
+site_url: https://UNEP-IMEO-MARS.github.io/marshsi
+site_description: 🛰️ Matched Filters retrievals for EMIT, PRISMA and EnMAP
 site_author: Gonzalo Mateo-García
 edit_uri: edit/main/docs/
-repo_name: mars_mf
-use_directory_urls: false
+repo_name: marshsi
 
-# Configuration
+nav:
+  - Home: index.md
+  - Tutorials:
+    - Matched filters for EMIT: emit_example.ipynb
+    - Matched filters for PRISMA: prisma_example.ipynb
+    - Matched filters for EnMAP: enmap_example.ipynb
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [..]
+  - mknotebooks:
+      execute: false
+      timeout: 100
+      allow_errors: false
+
 theme:
   name: material
   language: en
+  highlightjs: true
+  highlightjs_languages:
+    - python
   palette:
-    - scheme: default
-      primary: '#d49f0c'
-      accent: '#d49f0c'
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: deep orange
       toggle:
-        icon: material/toggle-switch-off-outline
+        icon: material/brightness-7
         name: Switch to dark mode
-    - scheme: slate
-      primary: '#201357'
-      accent: white
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep orange
       toggle:
-        icon: material/toggle-switch
+        icon: material/brightness-4
         name: Switch to light mode
   font:
     text: Roboto
     code: Roboto Mono
-  logo: notebooks/logo.webp
-  favicon: notebooks/logo.webp
   features:
     - navigation.instant
     - navigation.tabs
     - navigation.top
     - navigation.expand
     - navigation.indexes
-    - header.autohide   
+    - header.autohide
 
-
-nav:
-  - Home: 
-    - README.md
-  - Tutorials:
-    - Matched filters for EMIT: notebooks/emit_example.ipynb
-    - Matched filters for PRISMA: notebooks/prisma_example.ipynb
-    - Matched filters for EnMAP: notebooks/enmap_example.ipynb
-
-# Plugins
-plugins:
-  - search
-  - same-dir
-  - awesome-pages
-  - mkdocstrings
-  - mknotebooks:
-      execute: false
-      timeout: 100
-      allow_errors: false
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/UNEP-IMEO-MARS/marshsi
 
 markdown_extensions:
   - meta
   - admonition
   - pymdownx.highlight
+  - pymdownx.inlinehilite
   - pymdownx.superfences
-  - pymdownx.pathconverter
+  - pymdownx.details
   - pymdownx.tabbed
-  - mdx_truly_sane_lists
   - pymdownx.tasklist
-
-extra_css:
-  - assets/style.css
+  - codehilite
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true

@@ -4,6 +4,18 @@ install: ## Install the poetry environment and install the pre-commit hooks
 	@poetry install
 	@poetry shell
 
+.PHONY: test
+test: ## Run tests
+	@poetry run pytest -v
+
+.PHONY: test-notebooks
+test-notebooks: ## Run notebook integration tests (requires data files in tests/data/)
+	@poetry run pytest --nbmake docs/*_example.ipynb -v --nbmake-timeout=600
+
+.PHONY: lint
+lint: ## Run linters
+	@poetry run ruff check marshsi tests
+
 .PHONY: check
 check: ## Run code quality tools.
 	@echo "🚀 Checking Poetry lock file consistency with 'pyproject.toml': Running poetry check --lock"

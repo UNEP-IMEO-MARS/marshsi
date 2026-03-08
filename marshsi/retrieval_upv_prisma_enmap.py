@@ -5,11 +5,11 @@ import numpy as np
 from georeader import griddata
 from georeader.geotensor import GeoTensor
 from georeader.readers import enmap, prisma
+from loguru import logger
 from numpy.typing import NDArray
 from scipy.signal import medfilt2d
-from typing import Optional
 
-from mars_mf.matched_filters_upv import (
+from marshsi.matched_filters_upv import (
     AT_Combo_MF_2,
     AT_MF_select_window_alt,
     calc_jac_rad,
@@ -17,16 +17,6 @@ from mars_mf.matched_filters_upv import (
     read_luts,
     MAX_AMF
 )
-
-BAND_NAMES_COMBO = [
-    "Rad_out",
-    "MF(2100-2400)",
-    "WWMF(1000-2400)",
-    "MF-Combo",
-    "MF(2100-2400)FILTERED",
-    "WWMF(1000-2400)FILTERED",
-    "MF-Combo-Filtered",
-]
 
 # from utils import load_cube, mask_water, save_retrieval
 RAD_WAVELENGTH = 2_100
@@ -57,7 +47,7 @@ def target_spectrum_prisma(pi: prisma.PRISMA, swir_flag: bool) -> NDArray:
     amf = 1.0 / np.cos(vza * np.pi / 180) + 1.0 / np.cos(sza * np.pi / 180)
 
     if amf > MAX_AMF:
-        logging.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
+        logger.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
         amf = MAX_AMF
 
     wvl_mod, t_gas_arr, mr_gas_arr = read_luts(amf)
@@ -76,9 +66,10 @@ def target_spectrum_prisma(pi: prisma.PRISMA, swir_flag: bool) -> NDArray:
 
 
 def target_spectrum_enmap(enmapi: enmap.EnMAP) -> NDArray:
+    logger.warning(f"VZA: {enmapi.vza}, SZA: {enmapi.sza}")
     amf = 1.0 / np.cos(enmapi.vza * np.pi / 180) + 1.0 / np.cos(enmapi.sza * np.pi / 180)
     if amf > MAX_AMF:
-        logging.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
+        logger.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
         amf = MAX_AMF
     wvl_mod, t_gas_arr, mr_gas_arr = read_luts(amf)
 
@@ -92,11 +83,7 @@ def target_spectrum_enmap(enmapi: enmap.EnMAP) -> NDArray:
     return k
 
 
-def MF_sunglint_combo_enmap(enmapi: enmap.EnMAP, logger: Optional[logging.Logger] = None) -> GeoTensor:
-    if logger is None:
-        logger = logging.getLogger(__name__)
-        logging.basicConfig(level=logging.INFO)
-
+def MF_sunglint_combo_enmap(enmapi: enmap.EnMAP, logger: logging.Logger) -> GeoTensor:
     img_swir = enmapi.load_product("SPECTRAL_IMAGE_SWIR").values
 
     # TODO set to NaN invalid values?
@@ -144,17 +131,12 @@ def MF_sunglint_combo_enmap(enmapi: enmap.EnMAP, logger: Optional[logging.Logger
 
 def MF_sunglint_combo_prisma(
     pi: prisma.PRISMA,
-    logger: Optional[logging.Logger]=None,
+    logger: logging.Logger,
     mask_flag: bool = False,
     umbral_mask: float = 0.05,
 ) -> GeoTensor:
-    if logger is None:
-        logger = logging.getLogger(__name__)
-        logging.basicConfig(level=logging.INFO)
-    
     img_swir = pi.load_raw(swir_flag=True)
     img_vnir = pi.load_raw(swir_flag=False)
-
 
     # TODO set invalid values to np.nan??
 
