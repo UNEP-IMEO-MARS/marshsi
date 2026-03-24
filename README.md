@@ -1,4 +1,6 @@
 
+[![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://UNEP-IMEO-MARS.github.io/marshsi/)
+[![arXiv:2511.07719](https://img.shields.io/badge/arXiv-2511.07719-b31b1b.svg)](https://doi.org/10.48550/arXiv.2511.07719)
 [![DOI:10.5194/amt-17-1333-2024](https://img.shields.io/badge/DOI-10.5194%2Famt--17--1333--2024-blue)](https://doi.org/10.5194/amt-17-1333-2024)
 [![PyPI](https://img.shields.io/pypi/v/marshsi)](https://pypi.org/project/marshsi/)
 [![PyPI - License](https://img.shields.io/pypi/l/marshsi)](https://github.com/UNEP-IMEO-MARS/marshsi/blob/main/LICENSE)
