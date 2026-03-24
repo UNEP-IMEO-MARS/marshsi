@@ -5,7 +5,14 @@
 from typing import Optional, Tuple, Union
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError:
+    raise ImportError(
+        "torch is required for mag1c. Install it with: pip install marshsi[mag1c]"
+    )
+
 from georeader.geotensor import GeoTensor
 from georeader.readers.emit import EMITImage
 from tqdm import tqdm

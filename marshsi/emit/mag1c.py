@@ -48,9 +48,15 @@ from typing import Callable, List, Optional, Tuple, Union
 import numpy as np
 import spectral
 
+try:
+    import torch
+    import torch.utils.data
+except ImportError:
+    raise ImportError(
+        "torch is required for mag1c. Install it with: pip install marshsi[mag1c]"
+    )
+
 # Author: Markus Foote (foote@sci.utah.edu)
-import torch
-import torch.utils.data
 from tqdm import tqdm
 
 NODATA = -9999
