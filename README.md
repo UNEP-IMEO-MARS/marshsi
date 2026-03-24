@@ -20,6 +20,15 @@ pip install .
 If you use this repo please cite:
 
 ```
+@article{ruzicka_2025,
+    author = {Růžička, V. and Mateo-García, G. and Irakulis-Loitxate, I. and Johnson, J. E. and Montesino San Martín, M. and Allen, A. and Guanter, L. and Thompson, D. R.},
+    title = {Operational machine learning for remote spectroscopic detection of CH₄ point sources},
+    journal = {arXiv},
+    year = {2025},
+    doi = {10.48550/arXiv.2511.07719},
+    url = {https://doi.org/10.48550/arXiv.2511.07719}
+}
+
 @Article{roger_2024,
     AUTHOR = {Roger, J. and Guanter, L. and Gorroño, J. and Irakulis-Loitxate, I.},
     TITLE = {Exploiting the entire near-infrared spectral range to improve the detection of methane plumes with high-resolution imaging spectrometers},
