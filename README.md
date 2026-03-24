@@ -1,3 +1,8 @@
+
+[![DOI:10.5194/amt-17-1333-2024](https://img.shields.io/badge/DOI-10.5194%2Famt--17--1333--2024-blue)](https://doi.org/10.5194/amt-17-1333-2024)
+[![PyPI](https://img.shields.io/pypi/v/marshsi)](https://pypi.org/project/marshsi/)
+[![PyPI - License](https://img.shields.io/pypi/l/marshsi)](https://github.com/UNEP-IMEO-MARS/marshsi/blob/main/LICENSE)
+
 # Methane Alert and Response System Matched Filters retrievals for EMIT, PRISMA and EnMAP
 
 This repository provides an implementation with [georeader](https://github.com/spaceml-org/georeader) of the matched filters methods of [Roger et al. 2024](https://doi.org/10.5194/amt-17-1333-2024) for EMIT, PRISMA and EnMAP. It also includes an adaptation of [mag1c](https://github.com/markusfoote/mag1c) of [Foote et al. 2020](https://doi.org/10.1109/TGRS.2020.2976888) for EMIT.
@@ -6,14 +11,15 @@ This repository provides an implementation with [georeader](https://github.com/s
 # Installation
 
 ```
-pip install .
+pip install marshsi
 ```
 
 ## Examples
 
-* EMIT example 👉 [emit_example.ipynb](./notebooks/emit_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/UNEP-IMEO-MARS/marshsi/blob/main/notebooks/emit_example.ipynb)
-* PRISMA example 👉 [prisma_example.ipynb](./notebooks/prisma_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/UNEP-IMEO-MARS/marshsi/blob/main/notebooks/prisma_example.ipynb)
-* EnMAP example 👉 [enmap_example.ipynb](./notebooks/enmap_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/UNEP-IMEO-MARS/marshsi/blob/main/notebooks/enmap_example.ipynb)
+
+* EMIT example 👉 [emit_example.ipynb](./docs/emit_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/UNEP-IMEO-MARS/marshsi/blob/main/docs/emit_example.ipynb)
+* PRISMA example 👉 [prisma_example.ipynb](./docs/prisma_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/UNEP-IMEO-MARS/marshsi/blob/main/docs/prisma_example.ipynb)
+* EnMAP example 👉 [enmap_example.ipynb](./docs/enmap_example.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/UNEP-IMEO-MARS/marshsi/blob/main/docs/enmap_example.ipynb)
 
 ## Citation
 
