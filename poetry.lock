@@ -4351,7 +4351,7 @@ files = [
 name = "spectral"
 version = "0.24"
 description = "Spectral Python (SPy) is a Python module for hyperspectral image processing."
-optional = false
+optional = true
 python-versions = "*"
 files = [
     {file = "spectral-0.24-py3-none-any.whl", hash = "sha256:da0090ea92425ebb0d26cad3416886c67ec75dae481905b0a303c8ef92dec537"},
@@ -4811,9 +4811,9 @@ types = ["pandas-stubs", "scipy-stubs", "types-PyYAML", "types-Pygments", "types
 viz = ["cartopy (>=0.23)", "matplotlib (>=3.8)", "nc-time-axis", "seaborn"]
 
 [extras]
-mag1c = ["torch"]
+mag1c = ["spectral", "torch"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<4.0"
-content-hash = "5dff8099f32ebd51f5e6ed56cc025bc9556ccb31951fe5e69a3bbef0a923a90f"
+content-hash = "ea2cf3f9c6ecc5fb1d1a3da3e03a908db014d9fbad3c4cef9c8256f9b10a9e21"

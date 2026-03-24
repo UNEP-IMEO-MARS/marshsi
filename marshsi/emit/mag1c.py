@@ -46,7 +46,12 @@ import os
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
-import spectral
+try:
+    import spectral
+except ImportError:
+    raise ImportError(
+        "spectral is required for mag1c. Install it with: pip install marshsi[mag1c]"
+    )
 
 try:
     import torch
