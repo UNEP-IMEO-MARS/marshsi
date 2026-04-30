@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.2...v0.1.3) (2026-04-30)
+
+
+### Documentation
+
+* add MARS logo to site header and browser favicon ([7dfc18a](https://github.com/UNEP-IMEO-MARS/marshsi/commit/7dfc18af9a546c4c247c1f8e53bd797eedb1b6ca))
+* add MARS logo to site header and browser favicon ([97f713d](https://github.com/UNEP-IMEO-MARS/marshsi/commit/97f713dee6392ae644436452d864cd93ade50211))
+
 ## [0.1.2](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.1...v0.1.2) (2026-04-14)
 
 
