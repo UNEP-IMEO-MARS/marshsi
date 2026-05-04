@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from georeader.readers.emit import EMITImage
 from georeader.geotensor import GeoTensor
 from shapely.geometry import Polygon
+from shapely.ops import unary_union
 from georeader import rasterize, read, window_utils
 
 
@@ -17,6 +18,33 @@ def how_many_pixels_does_polygon_occupy(polygon, ref_data:GeoTensor):
     rasterized = rasterize.rasterize_geometry_like(polygon, data_like=ref_data, value=1, fill=0, crs_geometry="EPSG:4326")
     number_of_pixels = np.sum(rasterized.values)
     return number_of_pixels, rasterized.values
+
+
+def compute_other_plumes_exclusion_mask(
+    vectors: list[Polygon], pol_idx_target: int, ref_data: GeoTensor
+) -> GeoTensor:
+    """Rasterize non-target polygons into a mask aligned to ``ref_data``."""
+    other_polygons = [
+        polygon_other
+        for pol_idx_other, polygon_other in enumerate(vectors)
+        if pol_idx_other != pol_idx_target
+    ]
+    if len(other_polygons) == 0:
+        return GeoTensor(
+            np.zeros_like(ref_data.values, dtype=bool),
+            transform=ref_data.transform,
+            crs=ref_data.crs,
+            fill_value_default=False,
+        )
+
+    union_other_polygons = unary_union(other_polygons)
+    return rasterize.rasterize_geometry_like(
+        union_other_polygons,
+        data_like=ref_data,
+        value=1,
+        fill=0,
+        crs_geometry="EPSG:4326",
+    )
 
 def compute_masks(mf, mf_threshold=30, clouds_and_surface_water_mask=None, debug=False):
     ######### calculate bad pixel mask ################
@@ -116,6 +144,8 @@ def compute(ei:EMITImage, cmf:GeoTensor, vectors:list[Polygon],
             print(title)
 
             combined_mask, background_mask = compute_masks(cmf.values, mf_threshold, clouds_and_surface_water_mask=clouds_and_surface_water_mask_geo.values, debug=False)
+            exclusion_mask = compute_other_plumes_exclusion_mask(vectors, pol_idx, cmf)
+            background_mask = background_mask | exclusion_mask.values.astype(bool)
             orig_points_inside_plume = coords_inside_plume_from_binary(plume_mask, False)
 
             # TODO: probably can be easily read from the data, I wanted to check them here super visibly when debugging ... feel free to make this more elegant :)!
