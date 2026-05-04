@@ -35,33 +35,75 @@ def norm_s(s):
     return s / np.sum(s)
 
 
-def calc_jac_rad(mr_gas_arr, n_wvl, t_gas_arr, delta_mr_ref):
-    n_pts = len(mr_gas_arr)
-    delta_rad = np.zeros((n_pts, n_wvl))
-    delta_mr = np.zeros(n_pts)
+def calc_jac_rad(mr_gas_arr: NDArray, t_gas_arr: NDArray, delta_mr_ref: float = 1.0) -> NDArray:
+    """
+    Computes the Jacobian spectrum by fitting 2nd-degree polynomials relating mixing ratio
+    differences to normalized transmittance ratios for each wavelength, then evaluating the
+    derivative of these polynomials at a reference mixing ratio difference.
 
+    Notes:
+    From Thompson et al 2015, "Real-time remote detection and measurement for airborne imaging spectroscopy: a case study with methane"
+    "The target signature is the vector of negative absorption coefficients for a near-surface
+    plume of unit concentration and unit path length (i.e., 1 ppb-m). [...]
+     
+    The signature t should match the spectrum of the target feature. A reasonable approach is to use
+      the transmission shape itself (the red curve in Fig. 2). However, this is inaccurate when 
+      absorption is strong; further attenuation becomes nonlinear as absorption lines saturate. 
+      The matched filter assumes a linear perturbation, so the Jacobian of the radiance spectrum 
+      is an appropriate signature. We calculate it by modeling local CH4 enhancement as a uniform cell. 
+      The airborne instrument measures absorption along a path transecting the CH4 cloud. 
+      For thin, uniform plumes, the unknown quantities of absorption length and concentration are 
+      interchangeable, so we consider the combined quantity, the mixing ratio length expressed in ppm m
+      (Sandsten et al., 2000). Our derivation is similar to that of Theiler et al. (2005)."
+
+    Args:
+        mr_gas_arr (NDArray): Mixing ratio array of shape (n_pts,).
+        t_gas_arr (NDArray): Transmittance array of shape (n_pts, n_wvl).
+        delta_mr_ref (float): Reference delta mixing ratio. Default is 1.0.
+
+    Returns:
+        NDArray: Jacobian spectrum array of shape (n_wvl,).
+    """
+
+    # Extract dimensions from input arrays
+    n_wvl = t_gas_arr.shape[1]  # Number of wavelengths
+    n_pts = len(mr_gas_arr)  # Number of mixing ratio points
+
+    # Initialize arrays for normalized transmittance and mixing ratio differences
+    delta_rad = np.zeros((n_pts, n_wvl))  # Shape: (n_pts, n_wvl)
+    delta_mr = np.zeros(n_pts)  # Shape: (n_pts,)
+
+    # Compute normalized transmittance ratios (relative to first point) and mixing ratio differences
     for i in range(n_pts):
-        delta_rad[i, :] = t_gas_arr[i, :] / t_gas_arr[0, :]
-        delta_mr[i] = mr_gas_arr[i] - mr_gas_arr[0]
+        delta_rad[i, :] = t_gas_arr[i, :] / t_gas_arr[0, :]  # Normalize by first transmittance
+        delta_mr[i] = mr_gas_arr[i] - mr_gas_arr[0]  # Difference from first mixing ratio
 
-    n_pol_jac = 2
-    jac_gas = np.zeros((n_pol_jac + 1, n_wvl))
+    # Fit 2nd degree polynomial for each wavelength
+    n_pol_jac = 2  # Polynomial degree
+    jac_gas = np.zeros((n_pol_jac + 1, n_wvl))  # Shape: (3, n_wvl) - stores polynomial coefficients
 
+    # For each wavelength, fit polynomial: delta_rad = a*delta_mr^2 + b*delta_mr + c
     for i in range(n_wvl):
-        jac_gas[:, i] = np.polyfit(delta_mr, delta_rad[:, i], n_pol_jac)
+        jac_gas[:, i] = np.polyfit(delta_mr, delta_rad[:, i], n_pol_jac)  # Coefficients [a, b, c]
 
-    mr_poly = np.array([])
-    for i in range(n_pol_jac + 1):
-        mr_poly = np.append(mr_poly, [delta_mr**i])
+    # Create polynomial basis (not used in final calculation, legacy code)
+    # mr_poly = np.array([])
+    # for i in range(n_pol_jac + 1):
+    #     mr_poly = np.append(mr_poly, [delta_mr**i])
 
-    mr_poly = np.reshape(mr_poly, [n_pol_jac + 1, n_pts])
-    mr_poly = np.flip(mr_poly, axis=0)
+    # mr_poly = np.reshape(mr_poly, [n_pol_jac + 1, n_pts])  # Shape: (3, n_pts)
+    # mr_poly = np.flip(mr_poly, axis=0)  # Flip to have [delta_mr^2, delta_mr, 1]
 
-    jac_spec_rad = np.zeros(n_wvl)
+    # Compute Jacobian spectrum by evaluating polynomial derivative at delta_mr_ref
+    # Derivative of (a*x^2 + b*x + c) is (2*a*x + b)
+    jac_spec_rad = np.zeros(n_wvl)  # Shape: (n_wvl,)
     for i in range(n_wvl):
-        jac_spec_rad[i] = 2 * jac_gas[0, i] * delta_mr_ref + jac_gas[1, i]
+        jac_spec_rad[i] = (
+            2 * jac_gas[0, i] * delta_mr_ref + jac_gas[1, i]
+        )  # d(polynomial)/d(delta_mr) at delta_mr_ref
 
     return jac_spec_rad
+
 
 
 # retrieval_roger_lars
@@ -84,6 +126,33 @@ def generate_filter(wvl_M, wvl, wl_resol):
             s_norm_M[li1, bd] = norm_s(s)
 
     return s_norm_M
+
+
+def target_spectrum(amf: float, wavelengths: NDArray, fwhm: NDArray) -> NDArray:
+    """Compute the methane target signature (column-density Jacobian) for a sensor band set.
+
+    Reads the LUT at the given air-mass factor, computes the radiance Jacobian with respect
+    to CH4 column density, then convolves it with the sensor spectral response function.
+
+    This is the shared 1-D implementation used by EMIT and EnMAP.  PRISMA calls the same
+    LUT and Jacobian steps but loops over detector columns to handle the SMILE effect
+    (per-column SRF variation); see ``target_spectrum_prisma``.
+
+    The returned spectrum is in (ppm⁻1) units (the LUT convention). 
+    
+    Args:
+        amf: Air-mass factor, already clamped to ``MAX_AMF`` by the caller.
+        wavelengths: Sensor band centres in nm, shape ``(B,)``.
+        fwhm: Sensor band full-width at half-maximum values in nm, shape ``(B,)``.
+
+    Returns:
+        NDArray: Target signature, shape ``(B,)``, in (ppm⁻1) units
+    """
+    wvl_mod, t_gas_arr, mr_gas_arr = read_luts(amf)
+    mr_gas_arr = mr_gas_arr / 1000.0 # Convert to ppm
+    k_spectre = calc_jac_rad(mr_gas_arr, t_gas_arr, delta_mr_ref=1.0)
+    s = generate_filter(wvl_mod, wavelengths, fwhm)
+    return np.dot(k_spectre, s)
 
 
 def AT_Combo_MF_2(mf_extended, mf_classic):
