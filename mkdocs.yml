@@ -27,8 +27,8 @@ plugins:
 theme:
   name: material
   language: en
-  logo: docs/logo.png
-  favicon: docs/logo.png
+  logo: logo.png
+  favicon: logo.png
   highlightjs: true
   highlightjs_languages:
     - python
