@@ -106,8 +106,21 @@ def calc_jac_rad(mr_gas_arr: NDArray, t_gas_arr: NDArray, delta_mr_ref: float = 
 
 
 
-# retrieval_roger_lars
-def generate_filter(wvl_M, wvl, wl_resol):
+def generate_filter(wvl_M: NDArray, wvl: NDArray, wl_resol: NDArray) -> NDArray:
+    """Create the band-mapping matrix from LUT wavelengths to sensor bands.
+
+    This helper is used when building methane target signatures (for example in
+    ``target_spectrum`` and the PRISMA per-column variant).
+
+    Args:
+        wvl_M: LUT wavelength grid in nm, shape ``(N_model,)``.
+        wvl: Sensor band-center wavelengths in nm, shape ``(N_bands,)``.
+        wl_resol: Sensor spectral widths (FWHM-like term) in nm, shape ``(N_bands,)``.
+
+    Returns:
+        NDArray: Matrix of shape ``(N_model, N_bands)`` used to convolve LUT
+        spectra into sensor-band space.
+    """
     num_wvl_M = wvl_M.shape[0]
     num_wvl = wvl.shape[0]
 
