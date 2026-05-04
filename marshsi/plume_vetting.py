@@ -602,7 +602,7 @@ def compute_enmap(
 
     cmf = cmf.copy()
     if not cmf.same_extent(data_swir):
-        cmf = read.read_reproject_like(cmf, data_swir, fill_value_default=cmf.fill_value_default)
+        cmf = read.read_reproject_like(cmf, data_swir)
 
     return compute(
         radiance=rdn,
