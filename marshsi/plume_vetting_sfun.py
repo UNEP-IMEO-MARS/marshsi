@@ -122,7 +122,9 @@ def get_neighboring_points(top_points, square_size, point_inside_plume, remove_c
     return all_neighboring_points
 
 
-def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_points_inside_plume, ind, ite, ii, combined_mask, background_mask, plume_mask, dist_opt):
+def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_points_inside_plume, ind, ite, ii, combined_mask, background_mask, plume_mask, dist_opt, rng=None):
+    if rng is None:
+        rng = np.random.RandomState()
 
     ###########################################################
     extreme_pts_flag=0 # 1: remove pixels with highest MF values
@@ -141,11 +143,11 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
         plume_coord=orig_plume_coord
     else:
         assert False # for now we just want to run it once! disable this, so that we don't run in by mistake ...
-        rotation_angle = np.random.uniform(0, 2 * np.pi)
-        rotation_center = find_center(orig_points_inside_plume)  
+        rotation_angle = rng.uniform(0, 2 * np.pi)
+        rotation_center = find_center(orig_points_inside_plume)
         rotated_orig_points_inside_plume = rotate_points(orig_points_inside_plume, rotation_center, rotation_angle)  #rotate points inside plume
         rotated_orig_plume_coord = rotate_points(orig_plume_coord, rotation_center, rotation_angle)                  #rotate plume contour
-        translated_pts, translated_plume_coord= find_translated_pts(rotated_orig_points_inside_plume, rotated_orig_plume_coord, plume_mask) # translate them   
+        translated_pts, translated_plume_coord= find_translated_pts(rotated_orig_points_inside_plume, rotated_orig_plume_coord, plume_mask, rng=rng) # translate them
         if translated_pts is None:
             return None
         else:
@@ -258,7 +260,9 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
     
 
 
-def find_translated_pts(pts_inside_contour, pcontour, mask, max_iterations=100):
+def find_translated_pts(pts_inside_contour, pcontour, mask, max_iterations=100, rng=None):
+    if rng is None:
+        rng = np.random.RandomState()
     iterations = 0
     pts_inside_contour = np.array(pts_inside_contour)
     while iterations < max_iterations:
@@ -268,8 +272,9 @@ def find_translated_pts(pts_inside_contour, pcontour, mask, max_iterations=100):
         min_trans_y = -min(pts_inside_contour[:, 1])
 
         translation_vector = (
-            np.random.randint(min_trans_x, max_trans_x), 
-            np.random.randint(min_trans_y, max_trans_y))
+            rng.randint(min_trans_x, max_trans_x),
+            rng.randint(min_trans_y, max_trans_y),
+        )
 
         translated_pts = [(x + translation_vector[0], y + translation_vector[1]) for x, y in pts_inside_contour]
         translated_contour = [(x + translation_vector[0], y + translation_vector[1]) for x, y in pcontour]

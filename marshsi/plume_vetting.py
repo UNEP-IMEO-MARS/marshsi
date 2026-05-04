@@ -2,19 +2,29 @@
 # Identification of false methane plumes for orbital imaging spectrometers: A case study with EMIT
 # Chuchu Xiang, David R. Thompson, Robert O. Green, Jay E. Fahlen, Andrew K. Thorpe, Philip G. Brodrick, Red Willow Coleman, Amanda M. Lopez, Clayton D. Elder
 
+import logging
 from .plume_vetting_sfun import get_radiance_ratio, calculate_fit, calculate_dist, calculate_magnitude, find_uniform_indices
 import numpy as np
 import matplotlib.pyplot as plt
-from georeader.readers.emit import EMITImage
+from typing import Optional
+from numpy.typing import NDArray
 from georeader.geotensor import GeoTensor
+from georeader.readers.emit import EMITImage
+from georeader.readers import prisma
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
-from georeader import rasterize, read, window_utils
+from georeader import rasterize, read, window_utils, griddata
+
+
+logger = logging.getLogger(__name__)
+
+
+# Empirical scaling from ppb-compatible LUT units to ppm·m for plume-vetting target signature.
+# See design doc §3.1. Revisit after dedicated unit validation.
+SCALE_TARGET_PPB_TO_PPMxM = 10.0
 
 
 def how_many_pixels_does_polygon_occupy(polygon, ref_data:GeoTensor):
-    # potentially external dependencies ...
-    
     rasterized = rasterize.rasterize_geometry_like(polygon, data_like=ref_data, value=1, fill=0, crs_geometry="EPSG:4326")
     number_of_pixels = np.sum(rasterized.values)
     return number_of_pixels, rasterized.values
@@ -89,165 +99,449 @@ def coords_inside_plume_from_binary(thresholded_instance, debug=False):
 
     return points_inside_plume
 
-# === scene specific target signature ===
-# TODO: REPLACE WITH YOUR OWN CALL TO target_generation
+
+# Reference constant from the Xiang et al. prototype — kept for diagnostics.
+# Do NOT use in the operational compute path; derive target_signature from the sensor LUT instead.
 SCENE_TARGET_SIGNATURE_DEFAULT = np.asarray([9.65677880e-06, 9.44929334e-06, 9.04269344e-06, 8.85827101e-06, 8.98958035e-06, 8.49728372e-06, 8.62805714e-06, 8.80114715e-06, 8.33883158e-06, 8.16142819e-06, 7.73368404e-06, 7.39366692e-06, 7.35562982e-06, 7.04368029e-06, 6.11562144e-06, 6.53218762e-06, 6.63357218e-06, 5.78389142e-06, 5.84881855e-06, 5.47753266e-06, 4.79791781e-06, 1.13047456e-06, -2.35286791e-06, 4.59439270e-06, 4.56166689e-06, 3.33127292e-06, 1.54112465e-06, 3.26023549e-06, 3.48084766e-06, 2.07768389e-06, 1.34280623e-06, -1.43228457e-05, -5.30431391e-05, -1.43933273e-05, 1.97451749e-06, 2.04592925e-06, 1.06639434e-06, -5.74711749e-06, -1.36636143e-05, -8.58726232e-06, -5.89627356e-07, -2.22065616e-06, -3.23409978e-06, -2.62903649e-05, -2.16494465e-05, -5.92926997e-05, -2.94537249e-04, -3.05365354e-04, -6.61797152e-05, -3.59345933e-06, -9.58845533e-08, -6.98856370e-06, -2.20578091e-05, -4.63919870e-05, -9.98187735e-05, -1.06221661e-04, -1.34282159e-04, -8.69059866e-05, -3.41956800e-05,
                     -7.52936476e-06, -1.03710475e-06, -4.22974056e-05, -8.64636580e-05, -7.36054663e-05, -3.05240747e-04, -5.80721283e-04, -5.79022997e-04, -3.15508683e-03, -7.20142290e-03, -5.69085827e-03, -2.20352407e-03, -4.58517744e-04, -1.39371442e-04, -3.95658213e-05, -1.05974738e-05, -6.18653290e-06, -3.43563370e-05, -6.65568568e-05, -2.57255106e-04, -5.96432718e-04, -6.37708274e-04, -1.44363145e-03, -1.96407999e-03, -1.44413259e-03, -1.86983579e-03, -1.77950763e-03, -7.16888202e-04, -4.00458836e-04, -2.25835846e-04, -1.02706943e-04, -2.08844006e-05, -1.18141154e-07, 5.29685862e-07, -1.92552801e-07, -6.41317179e-06, -1.58942158e-04, -2.15882719e-04, -4.84205933e-04, -2.26379462e-03, -6.85842307e-03, -1.50126939e-02, -1.57474495e-02, -1.18301261e-02, -2.05601913e-02, -3.60834425e-02, -3.94273630e-02, -2.59847522e-02, -1.44271172e-02, -9.88838744e-03, -6.08667109e-03, -3.18633724e-03, -1.46129171e-03, -5.25151565e-04, -2.60101417e-04, -3.37112286e-04, -1.97430909e-04,
                     -8.00361556e-05, -1.10455109e-05, -1.31887203e-05, -4.19767046e-05, -3.32164105e-05, -2.49744551e-05, -7.15452259e-05, -3.87402691e-04, -2.02328613e-03, -7.70922092e-03, -1.23149560e-02, -2.02294852e-02, -2.76472263e-02, -2.87585064e-02, -2.83417192e-02, -3.16582578e-02, -2.93610347e-02, -3.23032725e-02, -3.81929431e-02, -3.90207197e-02, -3.29549597e-02, -3.48682336e-02, -3.12618589e-02, -2.05089329e-02, -1.49367305e-02, -1.07353593e-02, -5.97769992e-03, -4.02974442e-03, -2.81336234e-03, -2.08011794e-03, -2.54418498e-03, -2.72301685e-03, -1.72132735e-03, -9.38626716e-04, -5.69493323e-04, -4.56683372e-04, -3.41620643e-04, -2.17749254e-04, -1.29124440e-04, -9.29762234e-05, -6.92330156e-05, -5.67021771e-05, -6.96139050e-05, -6.38932674e-05, -4.11656578e-05, -3.67605277e-05, -7.57429864e-05, -2.71394567e-04, -1.01682139e-03, -3.75419836e-03, -1.26479782e-02, -3.75491237e-02, -8.38793133e-02, -1.13786173e-01, -1.16849649e-01, -8.59692033e-02, -1.38584499e-01,
                     -1.44295087e-01, -6.46457727e-02, -7.58295710e-02, -8.64002790e-02, -1.05684196e-01, -1.23224796e-01, -6.18103379e-02, -8.05863781e-02, -1.00805092e-01, -6.55649471e-02, -4.37739533e-02, -3.14234067e-02, -3.00320311e-02, -4.31862871e-02, -6.02494192e-02, -4.14973363e-02, -7.14254345e-02, -5.12582042e-02, -2.41301424e-02, -2.49192260e-02, -2.28203546e-02, -1.85601865e-02, -1.44834816e-02, -1.14326348e-02, -8.08636595e-03, -6.13045088e-03, -4.44505264e-03, -2.75363038e-03, -1.76782748e-03, -1.29662555e-03, -1.13509987e-03, -1.27273834e-03, -1.68181124e-03, -2.11492102e-03, -2.41104042e-03, -1.42739322e-03, -9.57903434e-04, -1.20352719e-03, -1.00580261e-03, -6.22048310e-04, -6.37473072e-04, -5.43213916e-04, -5.01025722e-04, -3.52837832e-04, -2.48386828e-04, -2.06771481e-04, -1.71915054e-04, -1.75783825e-04, -9.43188133e-05, -7.43165031e-05, -4.79766004e-05, -4.43891285e-05, -2.59220423e-05, -2.82430025e-05, -4.60777162e-05, -6.02059693e-05, -6.53891201e-05,
                     -9.07074440e-05, -1.41093437e-04, -2.96758124e-04, -7.87594072e-04, -2.17192119e-03, -5.58628668e-03, -1.28307233e-02, -2.48689824e-02, -4.44926900e-02, -6.73228909e-02, -7.92775824e-02, -7.57375261e-02, -5.13581699e-02, -3.93471604e-02, -2.78321330e-01, -3.55763275e-01, -9.97541568e-02, -1.58274724e-01, -2.33960939e-01, -3.49164500e-01, -4.32103636e-01, -5.05408477e-01, -5.59860848e-01, -6.24071005e-01, -5.76580213e-01, -5.90172912e-01, -6.55077760e-01, -8.45815529e-01, -9.15431133e-01, -5.23962589e-01, -7.43168727e-01, -7.78706093e-01, -5.71164846e-01, -8.73710217e-01, -1.14039687e+00, -1.03317436e+00, -6.33479317e-01, -8.39119315e-01, -1.10115544e+00, -5.98434457e-01, -5.94363617e-01, -5.53028991e-01, -4.19743280e-01, -2.49515472e-01, -2.23981385e-01, -2.46002450e-01, -1.57568885e-01, -1.20763738e-01, -1.00731546e-01, -7.19952086e-02, -4.84661609e-02, -3.50186769e-02, -2.38227621e-02, -2.20361438e-02, -1.95619810e-02])
 
-def compute(ei:EMITImage, cmf:GeoTensor, vectors:list[Polygon],
-            scene_target_signature:np.ndarray=None, debug_viz:bool = True,
-            num_pts:int = 40, min_polygon_size:int = 0, debug_jump_to:int = None) -> dict[dict[str, float]]:
-    
-    if scene_target_signature is None:
-        scene_target_signature = SCENE_TARGET_SIGNATURE_DEFAULT.copy()
-    
-    mask_raw = np.array(ei.nc_ds_l2amask["mask"])
-    clouds_and_surface_water_mask = np.sum(mask_raw[..., :3], axis=-1) > 0
-    clouds_and_surface_water_mask_geo = ei.georreference(clouds_and_surface_water_mask, fill_value_default=True)
 
-    data = ei.load(as_reflectance=False)
+def compute(
+    radiance: NDArray,
+    wavelengths: NDArray,
+    cmf: GeoTensor,
+    clouds_and_surface_water_mask: NDArray,
+    target_signature: NDArray,
+    polygons: list[Polygon],
+    mf_threshold: float = 30,
+    radius: int = 200,
+    deg_poly: int = 10,
+    num_pts: int = 40,
+    min_polygon_size: int = 0,
+    fit_wl_range: tuple[float, float] = (2100, 2440),
+    random_seed: Optional[int] = None,
+) -> dict:
+    """Compute plume-vetting scores for a list of candidate polygons.
 
-    rdn_ = data.values
-    rdn_ = np.transpose(rdn_, axes=(1, 2, 0)) # Ch, W, H => i want into W,H,Ch again
-    rdn_masked = np.where(rdn_ == -9999, 0, rdn_) # masked with 0 is close to how it's loaded in the main script ...
-    rdn = rdn_masked
+    Args:
+        radiance: TOA radiance array, shape (H, W, B). Masked pixels must be 0.
+        wavelengths: Band centre wavelengths in nm, shape (B,).
+        cmf: Matched-filter GeoTensor in ppm·m, shape (H, W). Must be on the same
+            spatial grid as ``radiance``. Fill-value pixels are treated as 0.
+        clouds_and_surface_water_mask: Boolean mask, shape (H, W). True = bad pixel.
+        target_signature: Methane target spectrum in ppm·m on the same wavelength
+            grid as ``wavelengths``. Either shape ``(B,)`` (same signature for every
+            polygon) or shape ``(P, B)`` (one signature per polygon, where
+            ``P = len(polygons)``).
+        polygons: Candidate plume polygons in WGS84.
+        mf_threshold: Half-width of the matched-filter range used to select background
+            pixels (|MF| <= mf_threshold).
+        radius: Search radius in pixels for background pixel matching.
+        deg_poly: Degree of the polynomial continuum in the spectral fit.
+        num_pts: Number of in-plume/background pixel pairs to use.
+        min_polygon_size: Polygons with fewer pixels than this are skipped.
+        fit_wl_range: (lo, hi) wavelength range in nm used for the spectral fit.
+        random_seed: Seed for the local RandomState so runs are reproducible.
+            None means non-deterministic (new seed each call).
 
-    # TODO units must be ppm x m
+    Returns:
+        dict keyed by polygon index. Each value is a dict with keys:
+            ``D_norm``, ``alpha_con_len``, ``top_pairs``, ``coef``, ``fit_sig``,
+            ``ratio``, ``wl_only_in_fit``.
+        Polygons that are too small or produce no valid pairs are omitted.
+    """
+    rng = np.random.RandomState(random_seed)
+
+    # Prepare CMF: replace fill values with 0 so they don't affect masks/stats
     cmf = cmf.copy()
     cmf.values[cmf.values == cmf.fill_value_default] = 0
     cmf.fill_value_default = 0.0
+    mf_values = cmf.values
 
-    if not cmf.same_extent(data):
-        cmf = read.read_reproject_like(cmf, data, fill_value_default=0.0)
+    # Derive wavelength index arrays from the fit range
+    wl = np.asarray(wavelengths)
+    ind_fit = np.where((wl >= fit_wl_range[0]) & (wl <= fit_wl_range[1]))[0]
+    ind_out = np.where((wl < fit_wl_range[0]) | (wl > fit_wl_range[1]))[0]
+    wl_only_in_fit = wl[ind_fit]
 
-    # HYPERPARAMS:
-    mf_threshold = 30 # The range of matched filter values around zero for the background pixels
-    radius = 200 # how far from the plume center do we look for points?
-    deg_poly = 10  # degree of polynomial for the theoretical model # (paper maybe mentioned 6?)
-
-    # print("mask",mask.shape)
-
+    target_signature = np.asarray(target_signature)
+    if target_signature.ndim == 1:
+        if target_signature.shape[0] != wl.shape[0]:
+            raise ValueError(
+                f"target_signature has {target_signature.shape[0]} bands, expected {wl.shape[0]}"
+            )
+    elif target_signature.ndim == 2:
+        if target_signature.shape[0] != len(polygons):
+            raise ValueError(
+                f"target_signature has {target_signature.shape[0]} rows, expected {len(polygons)}"
+            )
+        if target_signature.shape[1] != wl.shape[0]:
+            raise ValueError(
+                f"target_signature has {target_signature.shape[1]} bands, expected {wl.shape[0]}"
+            )
+    else:
+        raise ValueError(
+            f"target_signature must be 1-D or 2-D, got shape {target_signature.shape}"
+        )
 
     scores_per_polygon = {}
-    for pol_idx, polygon in enumerate(vectors):
-        if debug_jump_to is not None:
-            # DEBUG ... zoom into just one:
-            if pol_idx != debug_jump_to: continue
+    for pol_idx, polygon in enumerate(polygons):
+        if target_signature.ndim == 1:
+            sig = target_signature[ind_fit]
+        else:
+            sig = target_signature[pol_idx, ind_fit]
 
         number_of_pixels, plume_mask = how_many_pixels_does_polygon_occupy(polygon, cmf)
-        # only consider larger plumes?
-        if number_of_pixels > min_polygon_size:
-            title = "Polygon #"+str(pol_idx)+" ("+str(number_of_pixels)+"px)"
-            print(title)
+        if number_of_pixels <= min_polygon_size:
+            continue
 
-            combined_mask, background_mask = compute_masks(cmf.values, mf_threshold, clouds_and_surface_water_mask=clouds_and_surface_water_mask_geo.values, debug=False)
-            exclusion_mask = compute_other_plumes_exclusion_mask(vectors, pol_idx, cmf)
-            background_mask = background_mask | exclusion_mask.values.astype(bool)
-            orig_points_inside_plume = coords_inside_plume_from_binary(plume_mask, False)
+        combined_mask, background_mask = compute_masks(
+            mf_values, mf_threshold,
+            clouds_and_surface_water_mask=clouds_and_surface_water_mask,
+        )
+        exclusion_mask = compute_other_plumes_exclusion_mask(polygons, pol_idx, cmf)
+        background_mask = background_mask | exclusion_mask.values.astype(bool)
+        orig_points_inside_plume = coords_inside_plume_from_binary(plume_mask, False)
 
-            # TODO: probably can be easily read from the data, I wanted to check them here super visibly when debugging ... feel free to make this more elegant :)!
-            # wavelenghts in EMIT file (can be also loaded from the image ...)
-            # emit_image.wavelengths
-            # wl_orig = [381.00558, 388.4092, 395.81583, 403.2254, 410.638, 418.0536, 425.47214, 432.8927, 440.31726, 447.7428, 455.17035, 462.59888, 470.0304, 477.46292, 484.89743, 492.33292, 499.77142, 507.2099, 514.6504, 522.0909, 529.5333, 536.9768, 544.42126, 551.8667, 559.3142, 566.7616, 574.20905, 581.6585, 589.108, 596.55835, 604.0098, 611.4622, 618.9146, 626.36804, 633.8215, 641.2759, 648.7303, 656.1857, 663.6411, 671.09753, 678.5539, 686.0103, 693.4677, 700.9251, 708.38354, 715.84094, 723.2993, 730.7587, 738.2171, 745.6765, 753.1359, 760.5963, 768.0557, 775.5161, 782.97754, 790.4379, 797.89935, 805.36176, 812.8232, 820.2846, 827.746, 835.2074, 842.66986, 850.1313, 857.5937, 865.0551, 872.5176, 879.98004, 887.44147, 894.90393, 902.3664, 909.82886, 917.2913, 924.7538, 932.21625, 939.6788, 947.14026, 954.6027, 962.0643, 969.5268, 976.9883, 984.4498, 991.9114, 999.37286, 1006.8344, 1014.295, 1021.7566, 1029.2172, 1036.6777, 1044.1383, 1051.5989, 1059.0596, 1066.5201, 1073.9797,
-            #            1081.4404, 1088.9, 1096.3597, 1103.8184, 1111.2781, 1118.7368, 1126.1964, 1133.6552, 1141.1129, 1148.5717, 1156.0304, 1163.4882, 1170.9459, 1178.4037, 1185.8616, 1193.3184, 1200.7761, 1208.233, 1215.6898, 1223.1467, 1230.6036, 1238.0596, 1245.5154, 1252.9724, 1260.4283, 1267.8833, 1275.3392, 1282.7942, 1290.2502, 1297.7052, 1305.1603, 1312.6144, 1320.0685, 1327.5225, 1334.9756, 1342.4287, 1349.8818, 1357.3351, 1364.7872, 1372.2384, 1379.6907, 1387.1418, 1394.5931, 1402.0433, 1409.4937, 1416.944, 1424.3933, 1431.8427, 1439.292, 1446.7404, 1454.1888, 1461.6372, 1469.0847, 1476.5321, 1483.9796, 1491.4261, 1498.8727, 1506.3192, 1513.7649, 1521.2104, 1528.655, 1536.1007, 1543.5454, 1550.9891, 1558.4329, 1565.8766, 1573.3193, 1580.7621, 1588.205, 1595.6467, 1603.0886, 1610.5295, 1617.9705, 1625.4104, 1632.8513, 1640.2903, 1647.7303, 1655.1694, 1662.6074, 1670.0455, 1677.4836, 1684.9209, 1692.358, 1699.7952, 1707.2314, 1714.6667, 1722.103, 1729.5383, 1736.9727, 1744.4071,
-            #            1751.8414, 1759.2749, 1766.7084, 1774.1418, 1781.5743, 1789.007, 1796.4385, 1803.8701, 1811.3008, 1818.7314, 1826.1611, 1833.591, 1841.0206, 1848.4495, 1855.8773, 1863.3052, 1870.733, 1878.16, 1885.5869, 1893.013, 1900.439, 1907.864, 1915.2892, 1922.7133, 1930.1375, 1937.5607, 1944.9839, 1952.4071, 1959.8295, 1967.2518, 1974.6732, 1982.0946, 1989.515, 1996.9355, 2004.355, 2011.7745, 2019.1931, 2026.6118, 2034.0304, 2041.4471, 2048.865, 2056.2808, 2063.6965, 2071.1123, 2078.5273, 2085.9421, 2093.3562, 2100.769, 2108.1821, 2115.5942, 2123.0063, 2130.4175, 2137.8289, 2145.239, 2152.6482, 2160.0576, 2167.467, 2174.8755, 2182.283, 2189.6904, 2197.097, 2204.5034, 2211.9092, 2219.3147, 2226.7195, 2234.1233, 2241.5269, 2248.9297, 2256.3328, 2263.7346, 2271.1365, 2278.5376, 2285.9387, 2293.3386, 2300.7378, 2308.136, 2315.5342, 2322.9326, 2330.3298, 2337.7263, 2345.1216, 2352.517, 2359.9126, 2367.3071, 2374.7007, 2382.0935, 2389.486, 2396.878, 2404.2695, 2411.6604, 2419.0513,
-            #            2426.4402, 2433.8303, 2441.2183, 2448.6064, 2455.9944, 2463.3816, 2470.7678, 2478.153, 2485.5386, 2492.9238]
-            wl_orig = ei.wavelengths
-            # absorption region used for fitting the measurement to the model
-            ind_fit = np.where((np.array(wl_orig) >= 2100) & (np.array(wl_orig) <= 2440))
-            wl_only_in_fit = np.array(wl_orig)[ind_fit]
+        results = get_radiance_ratio(
+            wl, radius, num_pts, radiance, mf_values,
+            None,  # plume_coord (unused when ite=0)
+            orig_points_inside_plume, ind_out,
+            0,  # ite=0: use original plume position
+            0,  # ii: loop counter (CSV saving, not used here)
+            combined_mask, background_mask, plume_mask,
+            1,  # dist_opt=1: L1-normalised similarity
+            rng=rng,
+        )
+        if results is None:
+            continue
 
-            # indices of wavelenghts outside of methane visibility
-            ind_out = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224,
-                       225, 226, 227, 228, 229, 230, 277, 278, 279, 280, 281, 282, 283, 284]
-            mf = cmf.values
+        _contour_coord, _similarity, ratio, _top_ind, _top_mf, _avg_top_mf, _avg_in_plume_mf, top_pairs = results
 
-            plume_coord = None
-            ite = 0 # if not 0 has special behaviour ... simulates plume shifts?
-            ii = 0
+        ratio_fit = np.array(ratio)[ind_fit]
+        coef, fit_sig = calculate_fit(deg_poly, wl_only_in_fit, sig, ratio_fit)
+        coef[0] *= 1e5  # scale estimated concentration length
+        alpha_con_len = coef[0]
 
-            dist_opt = 1
-            results = get_radiance_ratio(wl_orig, radius, num_pts, rdn, mf, plume_coord, orig_points_inside_plume, ind_out, ite, ii, combined_mask, background_mask, plume_mask, dist_opt)
-            contour_coord, similarity_perpix, ratio, top_ind, top_mf, avg_top_mf, avg_in_plume_mf, top_pairs = results
+        polyn = np.polyval(coef[1:], wl_only_in_fit)
+        ratio_p = ratio_fit / polyn
+        sig_p = fit_sig / polyn
 
-            if debug_viz:
-                # Fig 1: Plot selected points
-                points_A = []
-                points_B = []
-                for pair in top_pairs:
-                    # (x, y) of target pixel, (x ,y) of background pixel, similarity score
-                    coord_a, coord_b, distance_similarity = pair
-                    points_A.append([coord_a[1],coord_a[0]])
-                    points_B.append([coord_b[1],coord_b[0]])
-                points_A = np.asarray(points_A)
-                points_B = np.asarray(points_B)
+        dist_t = calculate_dist(ratio_p, sig_p, 0)
+        mag_t = calculate_magnitude(ratio_p, 1)
+        dist_t /= mag_t
 
-                mask_ = np.where(cmf.values == -9999, 1, 0)
-                cmf_ = cmf.values / 8000.
-                cmf_ = np.where(mask_ == 1, 0, cmf_)
-                plt.imshow(cmf_, vmin=0, vmax=0.3)
+        scores_per_polygon[pol_idx] = {
+            "D_norm": dist_t,
+            "alpha_con_len": alpha_con_len,
+            "top_pairs": top_pairs,
+            "coef": coef,
+            "fit_sig": fit_sig,
+            "ratio": ratio_fit,
+            "wl_only_in_fit": wl_only_in_fit,
+        }
 
-                point_size = 12
-                plt.scatter(points_A[:,0], points_A[:,1], s=point_size, color="orange", label="in-plume") # in plume
-                plt.scatter(points_B[:,0], points_B[:,1], s=point_size, color="red", label="out-of-plume") # in background
-                plt.legend()
-                plt.show()
-
-            ###
-            sig = np.array(scene_target_signature)[ind_fit]
-            ratio = np.array(ratio)[ind_fit]  # target-to-background radiance ratio
-            coef, fit_sig = calculate_fit(deg_poly, wl_only_in_fit, sig, ratio)  # fit the model to measurement
-            coef[0] *= 1e5  # multiply estimated concentration length with the scaling factor
-            # coef[0] also known as alpha or as estim_concentration_len
-            estim_concentration_len = coef[0]
-
-            if debug_viz:
-                # Fig 2: Show how well do we match spectrally
-                fig, axes = plt.subplots(2, 1, constrained_layout=True, squeeze=False)
-                axes = axes.flatten()
-
-                wl = wl_only_in_fit
-                yy = np.polyval(coef[1:], wl)  # continuum function
-                y1 = ratio.copy()
-                y2 = fit_sig.copy()
-                ax_upper = axes[0]
-
-                ax_upper.plot(wl, yy, label='Continuum function', color='green', linestyle='--', alpha=0.5)
-                line1, = ax_upper.plot(wl, y1, label='Measurement')
-                line2, = ax_upper.plot(wl, y2, label='Model')
-                color1 = line1.get_color()
-                color2 = line2.get_color()
-
-                ax_lower = axes[1]
-                y1 = y1 / yy
-                y2 = y2 / yy
-                ax_lower.plot(wl, y1, label='Measurement / continuum function', color=color1, linestyle='--')
-                ax_lower.plot(wl, y2, label='Model / continuum function', color=color2, linestyle='--')
-                ax_lower.set_xlabel('Wavelength')
-
-                # legend:
-                handles_upper, labels_upper = ax_upper.get_legend_handles_labels()
-                handles_lower, labels_lower = ax_lower.get_legend_handles_labels()
-                combined_handles = handles_upper + handles_lower
-                combined_labels = labels_upper + labels_lower
-                plt.legend(combined_handles, combined_labels,
-                                fontsize=8)
-                plt.show()
-
-            polyn = np.polyval(coef[1:], wl_only_in_fit)
-            ratio_p = ratio / polyn
-            sig_p = fit_sig / polyn
-
-            dist_t = calculate_dist(ratio_p, sig_p, 0)
-            mag_t = calculate_magnitude(ratio_p, 1)
-            dist_t /= mag_t
-
-            print("D_norm = ", round(dist_t, 3)) # normalized distance between measurement and model ~ low => (more likely) plume
-            print("Estimated_concentration_len = ", round(estim_concentration_len, 3)) # ~ similar to mf in that polygon, high => (more likely) plume
-
-            # Somehow report the result...
-            scores_per_polygon[pol_idx] = {"D_norm":dist_t,"alpha_con_len":estim_concentration_len}
     return scores_per_polygon
+
+
+def plot_vetting(result: dict, cmf_values: NDArray) -> None:
+    """Plot the two diagnostic figures for a single polygon's vetting result.
+
+    Args:
+        result: One polygon's entry from the dict returned by :func:`compute`.
+        cmf_values: 2-D matched-filter array (H, W) for the scene, used as the
+            background image in the pixel-pair figure.
+    """
+    top_pairs = result["top_pairs"]
+    coef = result["coef"]
+    fit_sig = result["fit_sig"]
+    ratio = result["ratio"]
+    wl = result["wl_only_in_fit"]
+
+    # Fig 1: target (in-plume) and background pixel locations on the CMF image
+    points_A = np.array([[coord_a[1], coord_a[0]] for coord_a, _, _ in top_pairs])
+    points_B = np.array([[coord_b[1], coord_b[0]] for _, coord_b, _ in top_pairs])
+
+    all_x = np.concatenate([points_A[:, 0], points_B[:, 0]])
+    all_y = np.concatenate([points_A[:, 1], points_B[:, 1]])
+    pad = max(10, int(0.1 * max(all_x.max() - all_x.min(), all_y.max() - all_y.min())))
+    xlim = (all_x.min() - pad, all_x.max() + pad)
+    ylim = (all_y.max() + pad, all_y.min() - pad)  # imshow y-axis: larger row = lower
+
+    cmf_display = cmf_values / 8000.0
+    cmf_display = np.where(cmf_values <= 0, 0, cmf_display)
+    fig, ax = plt.subplots()
+    ax.imshow(cmf_display, vmin=0, vmax=0.3)
+    ax.scatter(points_A[:, 0], points_A[:, 1], s=12, color="orange", label="in-plume")
+    ax.scatter(points_B[:, 0], points_B[:, 1], s=12, color="red", label="out-of-plume")
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.legend()
+    plt.show()
+
+    # Fig 2: spectral fit — measurement vs model, with and without continuum
+    yy = np.polyval(coef[1:], wl)
+    y1 = ratio.copy()
+    y2 = fit_sig.copy()
+
+    fig, axes = plt.subplots(2, 1, constrained_layout=True, squeeze=False)
+    axes = axes.flatten()
+    ax_upper = axes[0]
+    ax_upper.plot(wl, yy, label="Continuum function", color="green", linestyle="--", alpha=0.5)
+    line1, = ax_upper.plot(wl, y1, label="Measurement")
+    line2, = ax_upper.plot(wl, y2, label="Model")
+
+    ax_lower = axes[1]
+    ax_lower.plot(wl, y1 / yy, label="Measurement / continuum", color=line1.get_color(), linestyle="--")
+    ax_lower.plot(wl, y2 / yy, label="Model / continuum", color=line2.get_color(), linestyle="--")
+    ax_lower.set_xlabel("Wavelength (nm)")
+
+    handles_u, labels_u = ax_upper.get_legend_handles_labels()
+    handles_l, labels_l = ax_lower.get_legend_handles_labels()
+    plt.legend(handles_u + handles_l, labels_u + labels_l, fontsize=8)
+    plt.show()
+
+
+def compute_emit(
+    emit_image: EMITImage,
+    cmf: GeoTensor,
+    polygons: list[Polygon],
+    target_signature: Optional[NDArray] = None,
+    num_pts: int = 40,
+    min_polygon_size: int = 0,
+    mf_threshold: float = 30,
+    radius: int = 200,
+    deg_poly: int = 10,
+    fit_wl_range: tuple[float, float] = (2100, 2440),
+    random_seed: Optional[int] = None,
+) -> dict:
+    """Plume vetting for an EMIT scene — convenience wrapper around :func:`compute`.
+
+    Extracts radiance, wavelengths, and the cloud/surface-water mask directly from
+    ``emit_image``, builds the LUT-derived target signature via
+    :func:`~marshsi.emit.retrieval_upv_emit.load_target_spectrum_mf`, and delegates
+    to :func:`compute`.
+
+    Args:
+        emit_image: Loaded EMIT scene (provides radiance, wavelengths, mask).
+        cmf: Matched-filter GeoTensor in ppm·m. Reprojected to the radiance grid
+            automatically if extents differ.
+        polygons: Candidate plume polygons in WGS84.
+        target_signature: Override the LUT-derived target spectrum (shape ``(B,)``,
+            in ppm·m). If ``None`` (default), uses
+            ``load_target_spectrum_mf(emit_image) * SCALE_TARGET_PPB_TO_PPMxM``.
+        num_pts: Number of in-plume / background pixel pairs.
+        min_polygon_size: Polygons with fewer pixels are skipped.
+        mf_threshold: Background pixel MF half-width threshold.
+        radius: Background search radius in pixels.
+        deg_poly: Polynomial continuum degree for the spectral fit.
+        fit_wl_range: (lo, hi) wavelength window in nm for the spectral fit.
+        random_seed: Seed for reproducible pixel-pair selection.
+
+    Returns:
+        Same dict as :func:`compute` — keyed by polygon index, each value contains
+        ``D_norm``, ``alpha_con_len``, and the diagnostic arrays for :func:`plot_vetting`.
+    """
+    from .emit.retrieval_upv_emit import load_target_spectrum_mf
+
+    # Build target signature from LUT if not supplied
+    if target_signature is None:
+        target_signature = load_target_spectrum_mf(emit_image) * SCALE_TARGET_PPB_TO_PPMxM
+
+    # Build cloud + surface-water mask (bands 0-2 of the L2A mask)
+    mask_raw = np.array(emit_image.nc_ds_l2amask["mask"])
+    clouds_and_surface_water_mask = np.sum(mask_raw[..., :3], axis=-1) > 0
+    clouds_mask_geo = emit_image.georreference(clouds_and_surface_water_mask, fill_value_default=True)
+
+    # Load radiance and reshape to (H, W, B); replace fill with 0
+    data = emit_image.load(as_reflectance=False)
+    rdn = np.transpose(data.values, (1, 2, 0))   # (B, H, W) → (H, W, B)
+    rdn = np.where(rdn == -9999, 0, rdn)
+
+    wavelengths = np.asarray(emit_image.wavelengths)
+
+    # Reproject CMF to the radiance grid if extents differ
+    cmf = cmf.copy()
+    if not cmf.same_extent(data):
+        cmf = read.read_reproject_like(cmf, data, fill_value_default=cmf.fill_value_default)
+
+    return compute(
+        radiance=rdn,
+        wavelengths=wavelengths,
+        cmf=cmf,
+        clouds_and_surface_water_mask=clouds_mask_geo.values,
+        target_signature=target_signature,
+        polygons=polygons,
+        mf_threshold=mf_threshold,
+        radius=radius,
+        deg_poly=deg_poly,
+        num_pts=num_pts,
+        min_polygon_size=min_polygon_size,
+        fit_wl_range=fit_wl_range,
+        random_seed=random_seed,
+    )
+
+
+def compute_prisma(
+    pi: prisma.PRISMA,
+    cmf: GeoTensor,
+    polygons: list[Polygon],
+    target_signature: Optional[NDArray] = None,
+    max_smile_cols: int = 100,
+    num_pts: int = 40,
+    min_polygon_size: int = 0,
+    mf_threshold: float = 30,
+    radius: int = 200,
+    deg_poly: int = 10,
+    fit_wl_range: tuple[float, float] = (2100, 2440),
+    random_seed: Optional[int] = None,
+) -> dict:
+    """Plume vetting for a PRISMA scene — convenience wrapper around :func:`compute`.
+
+    Uses PRISMA SWIR radiance, computes/accepts a SMILE-aware per-column target
+    signature, and averages that signature over the column span occupied by each
+    polygon before calling :func:`compute`.
+
+    Args:
+        pi: Loaded PRISMA scene.
+        cmf: Matched-filter GeoTensor for the scene.
+        polygons: Candidate plume polygons in WGS84.
+        target_signature: Optional override for the target signature. Accepted shapes:
+            ``(B,)`` (one signature for all polygons), ``(P, B)`` (one per polygon),
+            or ``(M, B)`` (one per PRISMA column). If ``None``, this wrapper builds
+            ``(M, B)`` with ``target_spectrum_prisma(pi, swir_flag=True)`` and applies
+            the empirical ``SCALE_TARGET_PPB_TO_PPMxM`` factor.
+        max_smile_cols: Warn when a polygon spans more than this many PRISMA columns
+            while averaging the SMILE-aware target signature.
+        num_pts: Number of in-plume / background pixel pairs.
+        min_polygon_size: Polygons with fewer pixels are skipped.
+        mf_threshold: Background pixel MF half-width threshold.
+        radius: Background search radius in pixels.
+        deg_poly: Polynomial continuum degree for the spectral fit.
+        fit_wl_range: (lo, hi) wavelength window in nm for the spectral fit.
+        random_seed: Seed for reproducible pixel-pair selection.
+
+    Returns:
+        Same dict as :func:`compute`.
+    """
+    from .prismaenmap.retrieval_upv_prisma_enmap import target_spectrum_prisma
+
+    # PRISMA raw SWIR is loaded in (column, row, band); transpose to (row, col, band)
+    rdn_raw = np.transpose(np.asarray(pi.load_raw(swir_flag=True)), (1, 0, 2)).astype(np.float64)
+    invalid_raw = np.any(~np.isfinite(rdn_raw), axis=-1) | np.any(rdn_raw == -9999, axis=-1)
+    rdn_raw = np.where(np.isfinite(rdn_raw), rdn_raw, 0.0)
+    rdn_raw = np.where(rdn_raw == -9999, 0.0, rdn_raw)
+
+    n_rows, n_cols, _ = rdn_raw.shape
+    col_idx_raw = np.broadcast_to(np.arange(n_cols, dtype=np.float32), (n_rows, n_cols))
+
+    cmf = cmf.copy()
+    if cmf.values.shape != rdn_raw.shape[:2]:
+        rdn_geo = griddata.read_to_crs(
+            rdn_raw.astype(np.float32), lons=pi.lons, lats=pi.lats, resolution_dst=30
+        )
+        invalid_geo = griddata.read_to_crs(
+            invalid_raw.astype(np.float32), lons=pi.lons, lats=pi.lats, resolution_dst=30
+        )
+        col_idx_geo = griddata.read_to_crs(
+            col_idx_raw, lons=pi.lons, lats=pi.lats, resolution_dst=30
+        )
+
+        if not cmf.same_extent(rdn_geo):
+            cmf = read.read_reproject_like(cmf, rdn_geo, fill_value_default=cmf.fill_value_default)
+
+        radiance = rdn_geo.values
+        clouds_and_surface_water_mask = invalid_geo.values > 0.5
+        col_index_map = col_idx_geo.values
+    else:
+        radiance = rdn_raw
+        clouds_and_surface_water_mask = invalid_raw
+        col_index_map = col_idx_raw
+
+    wavelengths = np.mean(np.asarray(pi.wavelength_swir), axis=0)
+
+    per_polygon_target_signature = None
+    per_column_target_signature = None
+    if target_signature is None:
+        per_column_target_signature = (
+            target_spectrum_prisma(pi, swir_flag=True) * SCALE_TARGET_PPB_TO_PPMxM
+        )
+    else:
+        target_signature = np.asarray(target_signature)
+        if target_signature.ndim == 1:
+            if target_signature.shape[0] != wavelengths.shape[0]:
+                raise ValueError(
+                    f"target_signature has {target_signature.shape[0]} bands, expected {wavelengths.shape[0]}"
+                )
+            per_polygon_target_signature = np.repeat(
+                target_signature[np.newaxis, :], len(polygons), axis=0
+            )
+        elif target_signature.ndim == 2:
+            if target_signature.shape[1] != wavelengths.shape[0]:
+                raise ValueError(
+                    f"target_signature has {target_signature.shape[1]} bands, expected {wavelengths.shape[0]}"
+                )
+            if target_signature.shape[0] == len(polygons):
+                per_polygon_target_signature = target_signature
+            else:
+                per_column_target_signature = target_signature
+        else:
+            raise ValueError(
+                f"target_signature must be 1-D or 2-D, got shape {target_signature.shape}"
+            )
+
+    if per_column_target_signature is not None:
+        if per_column_target_signature.shape[0] != n_cols:
+            raise ValueError(
+                f"Per-column target signature has {per_column_target_signature.shape[0]} columns, expected {n_cols}"
+            )
+
+        scene_mean_signature = np.nanmean(per_column_target_signature, axis=0)
+        per_polygon_target_signature = np.zeros((len(polygons), wavelengths.shape[0]), dtype=np.float64)
+
+        for pol_idx, polygon in enumerate(polygons):
+            _, plume_mask = how_many_pixels_does_polygon_occupy(polygon, cmf)
+            plume_mask = plume_mask.astype(bool)
+            polygon_cols = col_index_map[plume_mask]
+            polygon_cols = polygon_cols[np.isfinite(polygon_cols)]
+
+            if polygon_cols.size == 0:
+                logger.warning(
+                    "Could not infer PRISMA column span for polygon %d; using scene-mean target signature",
+                    pol_idx,
+                )
+                per_polygon_target_signature[pol_idx] = scene_mean_signature
+                continue
+
+            col_min = max(0, int(np.floor(np.min(polygon_cols))))
+            col_max = min(n_cols - 1, int(np.ceil(np.max(polygon_cols))))
+            col_span = col_max - col_min + 1
+            if col_span > max_smile_cols:
+                logger.warning(
+                    "Polygon %d spans %d PRISMA columns (> %d); SMILE averaging may be biased",
+                    pol_idx,
+                    col_span,
+                    max_smile_cols,
+                )
+            per_polygon_target_signature[pol_idx] = np.mean(
+                per_column_target_signature[col_min : col_max + 1], axis=0
+            )
+
+    return compute(
+        radiance=radiance,
+        wavelengths=wavelengths,
+        cmf=cmf,
+        clouds_and_surface_water_mask=clouds_and_surface_water_mask,
+        target_signature=per_polygon_target_signature,
+        polygons=polygons,
+        mf_threshold=mf_threshold,
+        radius=radius,
+        deg_poly=deg_poly,
+        num_pts=num_pts,
+        min_polygon_size=min_polygon_size,
+        fit_wl_range=fit_wl_range,
+        random_seed=random_seed,
+    )
