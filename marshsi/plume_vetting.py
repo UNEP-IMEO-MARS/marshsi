@@ -10,10 +10,14 @@ from typing import Optional
 from numpy.typing import NDArray
 from georeader.geotensor import GeoTensor
 from georeader.readers.emit import EMITImage
-from georeader.readers import prisma
+from georeader.readers import prisma, enmap
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 from georeader import rasterize, read, window_utils, griddata
+
+from .emit.retrieval_upv_emit import load_target_spectrum_mf
+from .prismaenmap.retrieval_upv_prisma_enmap import target_spectrum_prisma
+from .prismaenmap.retrieval_upv_prisma_enmap import target_spectrum_enmap
 
 
 logger = logging.getLogger(__name__)
@@ -345,7 +349,6 @@ def compute_emit(
         Same dict as :func:`compute` — keyed by polygon index, each value contains
         ``D_norm``, ``alpha_con_len``, and the diagnostic arrays for :func:`plot_vetting`.
     """
-    from .emit.retrieval_upv_emit import load_target_spectrum_mf
 
     # Build target signature from LUT if not supplied
     if target_signature is None:
@@ -427,7 +430,6 @@ def compute_prisma(
     Returns:
         Same dict as :func:`compute`.
     """
-    from .prismaenmap.retrieval_upv_prisma_enmap import target_spectrum_prisma
 
     # PRISMA raw SWIR is loaded in (column, row, band); transpose to (row, col, band)
     rdn_raw = np.transpose(np.asarray(pi.load_raw(swir_flag=True)), (1, 0, 2)).astype(np.float64)
@@ -536,6 +538,78 @@ def compute_prisma(
         cmf=cmf,
         clouds_and_surface_water_mask=clouds_and_surface_water_mask,
         target_signature=per_polygon_target_signature,
+        polygons=polygons,
+        mf_threshold=mf_threshold,
+        radius=radius,
+        deg_poly=deg_poly,
+        num_pts=num_pts,
+        min_polygon_size=min_polygon_size,
+        fit_wl_range=fit_wl_range,
+        random_seed=random_seed,
+    )
+
+
+def compute_enmap(
+    enmapi: enmap.EnMAP,
+    cmf: GeoTensor,
+    polygons: list[Polygon],
+    target_signature: Optional[NDArray] = None,
+    num_pts: int = 40,
+    min_polygon_size: int = 0,
+    mf_threshold: float = 30,
+    radius: int = 200,
+    deg_poly: int = 10,
+    fit_wl_range: tuple[float, float] = (2100, 2440),
+    random_seed: Optional[int] = None,
+) -> dict:
+    """Plume vetting for an EnMAP scene — convenience wrapper around :func:`compute`.
+
+    Extracts EnMAP SWIR radiance/wavelengths, builds the LUT-derived target
+    signature via :func:`~marshsi.prismaenmap.retrieval_upv_prisma_enmap.target_spectrum_enmap`,
+    and delegates to :func:`compute`.
+
+    Args:
+        enmapi: Loaded EnMAP scene.
+        cmf: Matched-filter GeoTensor in ppm·m. Reprojected to the radiance grid
+            automatically if extents differ.
+        polygons: Candidate plume polygons in WGS84.
+        target_signature: Override the LUT-derived target spectrum (shape ``(B,)``,
+            in ppm·m). If ``None`` (default), uses
+            ``target_spectrum_enmap(enmapi) * SCALE_TARGET_PPB_TO_PPMxM``.
+        num_pts: Number of in-plume / background pixel pairs.
+        min_polygon_size: Polygons with fewer pixels are skipped.
+        mf_threshold: Background pixel MF half-width threshold.
+        radius: Background search radius in pixels.
+        deg_poly: Polynomial continuum degree for the spectral fit.
+        fit_wl_range: (lo, hi) wavelength window in nm for the spectral fit.
+        random_seed: Seed for reproducible pixel-pair selection.
+
+    Returns:
+        Same dict as :func:`compute`.
+    """
+
+    if target_signature is None:
+        target_signature = target_spectrum_enmap(enmapi) * SCALE_TARGET_PPB_TO_PPMxM
+
+    data_swir = enmapi.load_product("SPECTRAL_IMAGE_SWIR")
+    rdn = np.transpose(data_swir.values, (1, 2, 0)).astype(np.float64)
+
+    invalid_mask = np.any(~np.isfinite(rdn), axis=-1) | np.any(rdn <= -9999, axis=-1)
+    rdn = np.where(np.isfinite(rdn), rdn, 0.0)
+    rdn = np.where(rdn <= -9999, 0.0, rdn)
+
+    wavelengths = np.asarray(enmapi.wl_center["swir"])
+
+    cmf = cmf.copy()
+    if not cmf.same_extent(data_swir):
+        cmf = read.read_reproject_like(cmf, data_swir, fill_value_default=cmf.fill_value_default)
+
+    return compute(
+        radiance=rdn,
+        wavelengths=wavelengths,
+        cmf=cmf,
+        clouds_and_surface_water_mask=invalid_mask,
+        target_signature=target_signature,
         polygons=polygons,
         mf_threshold=mf_threshold,
         radius=radius,
