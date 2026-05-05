@@ -396,7 +396,6 @@ def compute_prisma(
     cmf: GeoTensor,
     polygons: list[Polygon],
     target_signature: Optional[NDArray] = None,
-    max_smile_cols: int = 100,
     num_pts: int = 40,
     min_polygon_size: int = 0,
     mf_threshold: float = 30,
@@ -407,21 +406,19 @@ def compute_prisma(
 ) -> dict:
     """Plume vetting for a PRISMA scene — convenience wrapper around :func:`compute`.
 
-    Uses PRISMA SWIR radiance, computes/accepts a SMILE-aware per-column target
-    signature, and averages that signature over the column span occupied by each
-    polygon before calling :func:`compute`.
+    Uses PRISMA SWIR radiance and delegates to :func:`compute`. The SMILE effect is
+    **not** accounted for: both wavelengths and the default target signature are
+    averaged across all PRISMA columns, producing a single scene-wide spectrum.
 
     Args:
         pi: Loaded PRISMA scene.
         cmf: Matched-filter GeoTensor for the scene.
         polygons: Candidate plume polygons in WGS84.
-        target_signature: Optional override for the target signature. Accepted shapes:
-            ``(B,)`` (one signature for all polygons), ``(P, B)`` (one per polygon),
-            or ``(M, B)`` (one per PRISMA column). If ``None``, this wrapper builds
-            ``(M, B)`` with ``target_spectrum_prisma(pi, swir_flag=True)`` and applies
-            the empirical ``SCALE_TARGET_PPB_TO_PPMxM`` factor.
-        max_smile_cols: Warn when a polygon spans more than this many PRISMA columns
-            while averaging the SMILE-aware target signature.
+        target_signature: Override the default target spectrum. Accepted shapes:
+            ``(B,)`` (one signature for all polygons) or ``(P, B)`` (one per polygon).
+            If ``None``, builds a scene-average signature with
+            ``target_spectrum_prisma(pi, swir_flag=True)`` averaged over columns and
+            scaled by ``SCALE_TARGET_PPB_TO_PPMxM``.
         num_pts: Number of in-plume / background pixel pairs.
         min_polygon_size: Polygons with fewer pixels are skipped.
         mf_threshold: Background pixel MF half-width threshold.
@@ -436,112 +433,35 @@ def compute_prisma(
 
     # PRISMA raw SWIR is loaded in (column, row, band); transpose to (row, col, band)
     rdn_raw = np.transpose(np.asarray(pi.load_raw(swir_flag=True)), (1, 0, 2))
+    rdn_geo = griddata.read_to_crs(
+        rdn_raw.astype(np.float32), 
+        lons=pi.lons, 
+        lats=pi.lats, 
+        resolution_dst=30,
+        fill_value_default=-1,
+        dst_crs=cmf.crs
+    )
     
-    # invalid_raw = np.any(~np.isfinite(rdn_raw), axis=-1) | np.any(rdn_raw == -9999, axis=-1)
-    # rdn_raw = np.where(np.isfinite(rdn_raw), rdn_raw, 0.0)
-    # rdn_raw = np.where(rdn_raw == -9999, 0.0, rdn_raw)
-
-    # n_rows, n_cols, _ = rdn_raw.shape
-    # col_idx_raw = np.broadcast_to(np.arange(n_cols, dtype=np.float32), (n_rows, n_cols))
-
-    # cmf = cmf.copy()
-    # if cmf.values.shape != rdn_raw.shape[:2]:
-    #     rdn_geo = griddata.read_to_crs(
-    #         rdn_raw.astype(np.float32), lons=pi.lons, lats=pi.lats, resolution_dst=30
-    #     )
-    #     invalid_geo = griddata.read_to_crs(
-    #         invalid_raw.astype(np.float32), lons=pi.lons, lats=pi.lats, resolution_dst=30
-    #     )
-    #     col_idx_geo = griddata.read_to_crs(
-    #         col_idx_raw, lons=pi.lons, lats=pi.lats, resolution_dst=30
-    #     )
-
-    #     if not cmf.same_extent(rdn_geo):
-    #         cmf = read.read_reproject_like(cmf, rdn_geo, fill_value_default=cmf.fill_value_default)
-
-    #     radiance = rdn_geo.values
-    #     clouds_and_surface_water_mask = invalid_geo.values > 0.5
-    #     col_index_map = col_idx_geo.values
-    # else:
-    #     radiance = rdn_raw
-    #     clouds_and_surface_water_mask = invalid_raw
-    #     col_index_map = col_idx_raw
-
-    # wavelengths = np.mean(np.asarray(pi.wavelength_swir), axis=0)
-
-    per_polygon_target_signature = None
-    per_column_target_signature = None
+    if not cmf.same_extent(rdn_geo):
+        cmf = read.read_reproject_like(cmf, rdn_geo)
+    
+    invalid = np.any(~np.isfinite(rdn_geo.values), axis=-1) | np.any(rdn_geo.values == -1, axis=-1)
+    wavelengths = np.mean(np.asarray(pi.wavelength_swir), axis=0)
+    
     if target_signature is None:
-        per_column_target_signature = (
+        target_signature = (
             target_spectrum_prisma(pi, swir_flag=True) * SCALE_TARGET_PPB_TO_PPMxM
         )
-    else:
-        target_signature = np.asarray(target_signature)
-        if target_signature.ndim == 1:
-            if target_signature.shape[0] != wavelengths.shape[0]:
-                raise ValueError(
-                    f"target_signature has {target_signature.shape[0]} bands, expected {wavelengths.shape[0]}"
-                )
-            per_polygon_target_signature = np.repeat(
-                target_signature[np.newaxis, :], len(polygons), axis=0
-            )
-        elif target_signature.ndim == 2:
-            if target_signature.shape[1] != wavelengths.shape[0]:
-                raise ValueError(
-                    f"target_signature has {target_signature.shape[1]} bands, expected {wavelengths.shape[0]}"
-                )
-            if target_signature.shape[0] == len(polygons):
-                per_polygon_target_signature = target_signature
-            else:
-                per_column_target_signature = target_signature
-        else:
-            raise ValueError(
-                f"target_signature must be 1-D or 2-D, got shape {target_signature.shape}"
-            )
+        # average the target signature.
+        target_signature = np.mean(target_signature, axis=0)  # (M, B) → (B,)
 
-    if per_column_target_signature is not None:
-        if per_column_target_signature.shape[0] != n_cols:
-            raise ValueError(
-                f"Per-column target signature has {per_column_target_signature.shape[0]} columns, expected {n_cols}"
-            )
-
-        scene_mean_signature = np.nanmean(per_column_target_signature, axis=0)
-        per_polygon_target_signature = np.zeros((len(polygons), wavelengths.shape[0]), dtype=np.float64)
-
-        for pol_idx, polygon in enumerate(polygons):
-            _, plume_mask = how_many_pixels_does_polygon_occupy(polygon, cmf)
-            plume_mask = plume_mask.astype(bool)
-            polygon_cols = col_index_map[plume_mask]
-            polygon_cols = polygon_cols[np.isfinite(polygon_cols)]
-
-            if polygon_cols.size == 0:
-                logger.warning(
-                    "Could not infer PRISMA column span for polygon %d; using scene-mean target signature",
-                    pol_idx,
-                )
-                per_polygon_target_signature[pol_idx] = scene_mean_signature
-                continue
-
-            col_min = max(0, int(np.floor(np.min(polygon_cols))))
-            col_max = min(n_cols - 1, int(np.ceil(np.max(polygon_cols))))
-            col_span = col_max - col_min + 1
-            if col_span > max_smile_cols:
-                logger.warning(
-                    "Polygon %d spans %d PRISMA columns (> %d); SMILE averaging may be biased",
-                    pol_idx,
-                    col_span,
-                    max_smile_cols,
-                )
-            per_polygon_target_signature[pol_idx] = np.mean(
-                per_column_target_signature[col_min : col_max + 1], axis=0
-            )
 
     return compute(
-        radiance=radiance,
+        radiance=rdn_geo.values,
         wavelengths=wavelengths,
         cmf=cmf,
-        clouds_and_surface_water_mask=clouds_and_surface_water_mask,
-        target_signature=per_polygon_target_signature,
+        clouds_and_surface_water_mask=invalid,
+        target_signature=target_signature,
         polygons=polygons,
         mf_threshold=mf_threshold,
         radius=radius,
@@ -613,7 +533,6 @@ def compute_enmap(
 
     wavelengths = np.asarray(enmapi.wl_center["swir"])
 
-    cmf = cmf.copy()
     if not cmf.same_extent(data_swir):
         cmf = read.read_reproject_like(cmf, data_swir)
 
