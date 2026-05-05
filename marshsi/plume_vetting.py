@@ -370,9 +370,8 @@ def compute_emit(
     wavelengths = np.asarray(emit_image.wavelengths)
 
     # Reproject CMF to the radiance grid if extents differ
-    cmf = cmf.copy()
     if not cmf.same_extent(data):
-        cmf = read.read_reproject_like(cmf, data, fill_value_default=cmf.fill_value_default)
+        cmf = read.read_reproject_like(cmf, data)
 
     return compute(
         radiance=rdn,
