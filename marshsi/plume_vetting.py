@@ -522,20 +522,23 @@ def compute_enmap(
         target_signature = target_spectrum_enmap(enmapi) * SCALE_TARGET_PPB_TO_PPMxM
 
     data_swir = enmapi.load_product("SPECTRAL_IMAGE_SWIR")
-    # # apply RPC EnMAP (needed to have colocated data with the plume)
+    fill_val = data_swir.fill_value_default
+    # apply RPC EnMAP (needed to have colocated data with the plume)
     data_swir = read.read_rpcs(
             data_swir.values.astype(np.float32),
             rpcs=enmapi.rpcs_swir,
             dst_crs=cmf.crs,
             resolution_dst_crs=30,
-            fill_value_default=data_swir.fill_value_default,
+            fill_value_default=fill_val,
         )
 
     rdn = np.transpose(data_swir.values, (1, 2, 0)).astype(np.float64)
 
-    invalid_mask = np.any(~np.isfinite(rdn), axis=-1) | np.any(rdn <= -9999, axis=-1)
-    rdn = np.where(np.isfinite(rdn), rdn, 0.0)
-    rdn = np.where(rdn <= -9999, 0.0, rdn)
+    # np.all catches edge pixels where every band equals the fill value (RPC warp padding).
+    # np.isfinite catches NaN/inf from any remaining bad values.
+    invalid_mask = np.any(~np.isfinite(rdn), axis=-1) | np.all(rdn == fill_val, axis=-1)
+    rdn[invalid_mask] = 0.0
+    rdn = np.where(~np.isfinite(rdn), 0.0, rdn)
 
     wavelengths = np.asarray(enmapi.wl_center["swir"])
 
