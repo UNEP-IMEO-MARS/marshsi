@@ -434,18 +434,24 @@ def compute_prisma(
     # PRISMA raw SWIR is loaded in (column, row, band); transpose to (row, col, band)
     rdn_raw = np.transpose(np.asarray(pi.load_raw(swir_flag=True)), (1, 0, 2))
     rdn_geo = griddata.read_to_crs(
-        rdn_raw.astype(np.float32), 
+        rdn_raw.astype(np.float64), 
         lons=pi.lons, 
         lats=pi.lats, 
         resolution_dst=30,
-        fill_value_default=-1,
+        fill_value_default=-20,
         dst_crs=cmf.crs
     )
     
     if not cmf.same_extent(rdn_geo):
         cmf = read.read_reproject_like(cmf, rdn_geo)
     
-    invalid = np.any(~np.isfinite(rdn_geo.values), axis=-1) | np.any(rdn_geo.values == -1, axis=-1)
+    invalid = np.any(~np.isfinite(rdn_geo.values), axis=-1) | np.any(rdn_geo.values <= -20, axis=-1)
+    
+    # Transpose radiance to (H, W, B) and replace fill values with 0
+    rdn_vals = np.transpose(rdn_geo.values, (1, 2, 0))
+    rdn_vals = np.where(np.isfinite(rdn_vals), rdn_vals, 0.0)
+    rdn_vals = np.where(rdn_vals <= -20, 0.0, rdn_vals)
+    
     wavelengths = np.mean(np.asarray(pi.wavelength_swir), axis=0)
     
     if target_signature is None:
@@ -455,9 +461,9 @@ def compute_prisma(
         # average the target signature.
         target_signature = np.mean(target_signature, axis=0)  # (M, B) → (B,)
 
-
+    
     return compute(
-        radiance=rdn_geo.values,
+        radiance=rdn_vals,
         wavelengths=wavelengths,
         cmf=cmf,
         clouds_and_surface_water_mask=invalid,
