@@ -445,7 +445,7 @@ def compute_prisma(
     if not cmf.same_extent(rdn_geo):
         cmf = read.read_reproject_like(cmf, rdn_geo)
     
-    invalid = np.any(~np.isfinite(rdn_geo.values), axis=-1) | np.any(rdn_geo.values <= -20, axis=-1)
+    invalid = np.any(~np.isfinite(rdn_geo.values), axis=0) | np.any(rdn_geo.values <= -20, axis=0)
     
     # Transpose radiance to (H, W, B) and replace fill values with 0
     rdn_vals = np.transpose(rdn_geo.values, (1, 2, 0))
