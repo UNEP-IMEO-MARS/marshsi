@@ -277,13 +277,16 @@ def plot_vetting(result: dict, cmf_values: NDArray) -> None:
 
     cmf_display = cmf_values / 8000.0
     cmf_display = np.where(cmf_values <= 0, 0, cmf_display)
-    fig, ax = plt.subplots()
-    ax.imshow(cmf_display, vmin=0, vmax=0.3)
-    ax.scatter(points_A[:, 0], points_A[:, 1], s=12, color="orange", label="in-plume")
-    ax.scatter(points_B[:, 0], points_B[:, 1], s=12, color="red", label="out-of-plume")
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    ax.legend()
+    fig, (ax_plain, ax_scatter) = plt.subplots(1, 2, sharey=True)
+    fig.suptitle(f"D_norm={result['D_norm']:.3f}  α_con_len={result['alpha_con_len']:.3f}")
+    ax_plain.imshow(cmf_display, vmin=0, vmax=0.3)
+    ax_plain.set_xlim(xlim)
+    ax_plain.set_ylim(ylim)
+    ax_scatter.imshow(cmf_display, vmin=0, vmax=0.3)
+    ax_scatter.scatter(points_A[:, 0], points_A[:, 1], s=12, color="orange", label="in-plume")
+    ax_scatter.scatter(points_B[:, 0], points_B[:, 1], s=12, color="red", label="out-of-plume")
+    ax_scatter.set_xlim(xlim)
+    ax_scatter.legend()
     plt.show()
 
     # Fig 2: spectral fit — measurement vs model, with and without continuum
@@ -432,38 +435,39 @@ def compute_prisma(
     """
 
     # PRISMA raw SWIR is loaded in (column, row, band); transpose to (row, col, band)
-    rdn_raw = np.transpose(np.asarray(pi.load_raw(swir_flag=True)), (1, 0, 2)).astype(np.float64)
-    invalid_raw = np.any(~np.isfinite(rdn_raw), axis=-1) | np.any(rdn_raw == -9999, axis=-1)
-    rdn_raw = np.where(np.isfinite(rdn_raw), rdn_raw, 0.0)
-    rdn_raw = np.where(rdn_raw == -9999, 0.0, rdn_raw)
+    rdn_raw = np.transpose(np.asarray(pi.load_raw(swir_flag=True)), (1, 0, 2))
+    
+    # invalid_raw = np.any(~np.isfinite(rdn_raw), axis=-1) | np.any(rdn_raw == -9999, axis=-1)
+    # rdn_raw = np.where(np.isfinite(rdn_raw), rdn_raw, 0.0)
+    # rdn_raw = np.where(rdn_raw == -9999, 0.0, rdn_raw)
 
-    n_rows, n_cols, _ = rdn_raw.shape
-    col_idx_raw = np.broadcast_to(np.arange(n_cols, dtype=np.float32), (n_rows, n_cols))
+    # n_rows, n_cols, _ = rdn_raw.shape
+    # col_idx_raw = np.broadcast_to(np.arange(n_cols, dtype=np.float32), (n_rows, n_cols))
 
-    cmf = cmf.copy()
-    if cmf.values.shape != rdn_raw.shape[:2]:
-        rdn_geo = griddata.read_to_crs(
-            rdn_raw.astype(np.float32), lons=pi.lons, lats=pi.lats, resolution_dst=30
-        )
-        invalid_geo = griddata.read_to_crs(
-            invalid_raw.astype(np.float32), lons=pi.lons, lats=pi.lats, resolution_dst=30
-        )
-        col_idx_geo = griddata.read_to_crs(
-            col_idx_raw, lons=pi.lons, lats=pi.lats, resolution_dst=30
-        )
+    # cmf = cmf.copy()
+    # if cmf.values.shape != rdn_raw.shape[:2]:
+    #     rdn_geo = griddata.read_to_crs(
+    #         rdn_raw.astype(np.float32), lons=pi.lons, lats=pi.lats, resolution_dst=30
+    #     )
+    #     invalid_geo = griddata.read_to_crs(
+    #         invalid_raw.astype(np.float32), lons=pi.lons, lats=pi.lats, resolution_dst=30
+    #     )
+    #     col_idx_geo = griddata.read_to_crs(
+    #         col_idx_raw, lons=pi.lons, lats=pi.lats, resolution_dst=30
+    #     )
 
-        if not cmf.same_extent(rdn_geo):
-            cmf = read.read_reproject_like(cmf, rdn_geo, fill_value_default=cmf.fill_value_default)
+    #     if not cmf.same_extent(rdn_geo):
+    #         cmf = read.read_reproject_like(cmf, rdn_geo, fill_value_default=cmf.fill_value_default)
 
-        radiance = rdn_geo.values
-        clouds_and_surface_water_mask = invalid_geo.values > 0.5
-        col_index_map = col_idx_geo.values
-    else:
-        radiance = rdn_raw
-        clouds_and_surface_water_mask = invalid_raw
-        col_index_map = col_idx_raw
+    #     radiance = rdn_geo.values
+    #     clouds_and_surface_water_mask = invalid_geo.values > 0.5
+    #     col_index_map = col_idx_geo.values
+    # else:
+    #     radiance = rdn_raw
+    #     clouds_and_surface_water_mask = invalid_raw
+    #     col_index_map = col_idx_raw
 
-    wavelengths = np.mean(np.asarray(pi.wavelength_swir), axis=0)
+    # wavelengths = np.mean(np.asarray(pi.wavelength_swir), axis=0)
 
     per_polygon_target_signature = None
     per_column_target_signature = None
@@ -592,6 +596,15 @@ def compute_enmap(
         target_signature = target_spectrum_enmap(enmapi) * SCALE_TARGET_PPB_TO_PPMxM
 
     data_swir = enmapi.load_product("SPECTRAL_IMAGE_SWIR")
+    # # apply RPC EnMAP (needed to have colocated data with the plume)
+    data_swir = read.read_rpcs(
+            data_swir.values.astype(np.float32),
+            rpcs=enmapi.rpcs_swir,
+            dst_crs=cmf.crs,
+            resolution_dst_crs=30,
+            fill_value_default=data_swir.fill_value_default,
+        )
+
     rdn = np.transpose(data_swir.values, (1, 2, 0)).astype(np.float64)
 
     invalid_mask = np.any(~np.isfinite(rdn), axis=-1) | np.any(rdn <= -9999, axis=-1)
