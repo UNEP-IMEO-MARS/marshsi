@@ -13,29 +13,32 @@ logger = logging.getLogger(__name__)
 from marshsi.matched_filters_upv import (
     AT_Combo_MF_2,
     AT_MF_select_window_alt,
-    calc_jac_rad,
-    generate_filter,
-    read_luts,
+    target_spectrum,
     MAX_AMF,
 )
 from ..lut import air_mass_factor
 
 
 def load_target_spectrum_mf(emit_image: emit.EMITImage) -> NDArray:
+    """Compute the methane target signature for an EMIT scene.
+
+    Derives the air-mass factor from the scene's mean solar and view zenith angles,
+    then delegates to :func:`~marshsi.matched_filters_upv.target_spectrum` to build
+    the LUT-derived Jacobian spectrum resampled to EMIT's spectral response function.
+
+    Args:
+        emit_image: EMIT image reader; provides ``mean_sza``, ``mean_vza``,
+            ``wavelengths``, and ``fwhm``.
+
+    Returns:
+        NDArray: Target signature, shape ``(B,)`` where *B* is the number of EMIT bands
+            (typically 285), in ppm-1 units.
+    """
     amf = air_mass_factor(sza=emit_image.mean_sza, vza=emit_image.mean_vza)
     if amf > MAX_AMF:
         logger.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
         amf = MAX_AMF
-    wvl_mod, t_gas_arr, mr_gas_arr = read_luts(amf)
-
-    n_wvl = len(wvl_mod)
-    mr_gas_arr = mr_gas_arr / 1000.0
-    delta_mr_ref = 1.0
-    k_spectre = calc_jac_rad(mr_gas_arr, n_wvl, t_gas_arr, delta_mr_ref)
-    s = generate_filter(wvl_mod, emit_image.wavelengths, emit_image.fwhm)
-
-    k = np.dot(k_spectre, s)
-    return k
+    return target_spectrum(amf, emit_image.wavelengths, emit_image.fwhm)
 
 
 EXTENDED_WAVELENGTH_RANGE = (975, 2_445)

@@ -15,7 +15,8 @@ from marshsi.matched_filters_upv import (
     calc_jac_rad,
     generate_filter,
     read_luts,
-    MAX_AMF
+    target_spectrum,
+    MAX_AMF,
 )
 from ..lut import air_mass_factor
 
@@ -41,7 +42,28 @@ def mask_water(img, img_ref, umbral):
 
 
 def target_spectrum_prisma(pi: prisma.PRISMA, swir_flag: bool) -> NDArray:
-    # def target_spectrum(self, swir_flag:bool) -> NDArray:
+    """Compute the methane target signature for a PRISMA scene.
+
+    PRISMA has a SMILE effect: each detector column has a slightly different spectral
+    response function (SRF), so the target signature varies across the swath.  This
+    function returns a **per-column** array of shape ``(M, B)`` to capture that
+    variation, unlike EMIT and EnMAP which return a single 1-D vector.
+
+    Implementation note: the LUT interpolation and Jacobian computation are performed
+    *once* for the scene-mean AMF; only ``generate_filter`` is called per column.
+    Delegating to :func:`~marshsi.matched_filters_upv.target_spectrum` inside the loop
+    would repeat the expensive LUT read *M* times.
+
+    For plume vetting, average the returned array over the column range spanned by the
+    plume polygon before passing to ``compute()``.
+
+    Args:
+        pi: PRISMA image reader.
+        swir_flag: If ``True``, use the SWIR channel (~1000–2440 nm); otherwise VNIR.
+
+    Returns:
+        NDArray: Per-column target signatures, shape ``(M, B)``, in ppm⁻1 units
+    """
     if swir_flag:
         vza = pi.vza_swir
         sza = pi.sza_swir
@@ -56,41 +78,42 @@ def target_spectrum_prisma(pi: prisma.PRISMA, swir_flag: bool) -> NDArray:
         N, M, B = pi.ltoa_vnir.shape
 
     amf = air_mass_factor(sza=sza, vza=vza)
-
     if amf > MAX_AMF:
         logging.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
         amf = MAX_AMF
 
+    # Compute Jacobian once for the scene-mean AMF; only SRF convolution is per-column.
     wvl_mod, t_gas_arr, mr_gas_arr = read_luts(amf)
-    n_wvl = len(wvl_mod)
     mr_gas_arr = mr_gas_arr / 1000.0
-    delta_mr_ref = 1.0
-
-    k_spectre = calc_jac_rad(mr_gas_arr, n_wvl, t_gas_arr, delta_mr_ref)
+    k_spectre = calc_jac_rad(mr_gas_arr, t_gas_arr, delta_mr_ref=1.0)
     k_array = np.zeros((M, B))
     for i in range(M):
         s = generate_filter(wvl_mod, band_array[i], fwhm_array[i])
-        k = np.dot(k_spectre, s)
-        k_array[i] = k
+        k_array[i] = np.dot(k_spectre, s)
 
     return k_array
 
 
 def target_spectrum_enmap(enmapi: enmap.EnMAP) -> NDArray:
+    """Compute the methane target signature for an EnMAP scene.
+
+    EnMAP has a uniform SRF across the swath (no significant SMILE effect), so a single
+    1-D target spectrum covers all pixels, unlike PRISMA which requires per-column spectra.
+
+    Args:
+        enmapi: EnMAP image reader; provides ``sza``, ``vza``, ``wl_center``, and
+            ``wl_fwhm`` for the SWIR channel.
+
+    Returns:
+        NDArray: Target signature, shape ``(B_swir,)`` where *B_swir* is the number of
+            EnMAP SWIR bands, in **ppb-compatible units**.  Multiply by
+            ``ATMOSPHERE_HEIGHT_METHANE / 1000`` (~8) to convert to ppm·m.
+    """
     amf = air_mass_factor(sza=enmapi.sza, vza=enmapi.vza)
     if amf > MAX_AMF:
         logging.warning(f"AMF exceeds {MAX_AMF}: {amf}, truncated")
         amf = MAX_AMF
-    wvl_mod, t_gas_arr, mr_gas_arr = read_luts(amf)
-
-    n_wvl = len(wvl_mod)
-    mr_gas_arr = mr_gas_arr / 1000.0
-    delta_mr_ref = 1.0
-    k_spectre = calc_jac_rad(mr_gas_arr, n_wvl, t_gas_arr, delta_mr_ref)
-    s = generate_filter(wvl_mod, enmapi.wl_center["swir"], enmapi.wl_fwhm["swir"])
-
-    k = np.dot(k_spectre, s)
-    return k
+    return target_spectrum(amf, enmapi.wl_center["swir"], enmapi.wl_fwhm["swir"])
 
 
 def MF_sunglint_combo_enmap(enmapi: enmap.EnMAP, logger: Optional[logging.Logger] = None) -> GeoTensor:
