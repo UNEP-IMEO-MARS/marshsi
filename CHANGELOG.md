@@ -5,7 +5,7 @@
 
 ### Features
 
-* plume vetting for EMIT, PRISMA and EnMAP ([1cdeabb](https://github.com/UNEP-IMEO-MARS/marshsi/commit/1cdeabb4ed7bce11dc2871f43557810714551adf))
+* Plume vetting for EMIT, PRISMA and EnMAP ([1cdeabb](https://github.com/UNEP-IMEO-MARS/marshsi/commit/1cdeabb4ed7bce11dc2871f43557810714551adf))
 
 ## [0.1.3](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.2...v0.1.3) (2026-04-30)
 
