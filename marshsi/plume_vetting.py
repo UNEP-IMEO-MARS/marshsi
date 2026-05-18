@@ -3,22 +3,27 @@
 # Chuchu Xiang, David R. Thompson, Robert O. Green, Jay E. Fahlen, Andrew K. Thorpe, Philip G. Brodrick, Red Willow Coleman, Amanda M. Lopez, Clayton D. Elder
 
 import logging
-from .plume_vetting_sfun import get_radiance_ratio, calculate_fit, calculate_dist, calculate_magnitude, find_uniform_indices
-import numpy as np
-import matplotlib.pyplot as plt
 from typing import Optional
-from numpy.typing import NDArray
+
+import matplotlib.pyplot as plt
+import numpy as np
+from georeader import griddata, rasterize, read
 from georeader.geotensor import GeoTensor
+from georeader.readers import enmap, prisma
 from georeader.readers.emit import EMITImage
-from georeader.readers import prisma, enmap
+from numpy.typing import NDArray
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
-from georeader import rasterize, read, window_utils, griddata
 
 from .emit.retrieval_upv_emit import load_target_spectrum_mf
-from .prismaenmap.retrieval_upv_prisma_enmap import target_spectrum_prisma
-from .prismaenmap.retrieval_upv_prisma_enmap import target_spectrum_enmap
-
+from .plume_vetting_sfun import (
+    calculate_dist,
+    calculate_fit,
+    calculate_magnitude,
+    find_uniform_indices,
+    get_radiance_ratio,
+)
+from .prismaenmap.retrieval_upv_prisma_enmap import target_spectrum_enmap, target_spectrum_prisma
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +140,23 @@ def compute(
         wavelengths: Band centre wavelengths in nm, shape (B,).
         cmf: Matched-filter GeoTensor in ppm·m, shape (H, W). Must be on the same
             spatial grid as ``radiance``. Fill-value pixels are treated as 0.
-        clouds_and_surface_water_mask: Boolean mask, shape (H, W). True = bad pixel.
+        clouds_and_surface_water_mask: Boolean mask, shape (H, W). True = pixel
+            must not be used as target or background. The caller is responsible
+            for including, in addition to clouds and surface water, every pixel
+            with non-finite or fill-value radiance/cmf. Concretely::
+
+                clouds_and_surface_water_mask |= (
+                    np.any(~np.isfinite(radiance), axis=-1)
+                    | np.any(radiance == RADIANCE_FILL_VALUE, axis=-1)
+                    | ~np.isfinite(cmf.values)
+                    | (cmf.values == cmf.fill_value_default)
+                )
+
+            If this contract is broken, :func:`get_radiance_ratio` will raise a
+            descriptive ``ValueError`` when it detects all-zero or non-finite
+            rows in the target / background radiance arrays — see the per-sensor
+            wrappers (:func:`compute_emit`, :func:`compute_prisma`,
+            :func:`compute_enmap`) for reference implementations.
         target_signature: Methane target spectrum in ppm·m on the same wavelength
             grid as ``wavelengths``. Either shape ``(B,)`` (same signature for every
             polygon) or shape ``(P, B)`` (one signature per polygon, where
@@ -312,6 +333,10 @@ def plot_vetting(result: dict, cmf_values: NDArray) -> None:
     plt.show()
 
 
+EMIT_RADIANCE_FILL_VALUE = -9999
+PRISMA_RADIANCE_FILL_VALUE = -20
+
+
 def compute_emit(
     emit_image: EMITImage,
     cmf: GeoTensor,
@@ -324,6 +349,7 @@ def compute_emit(
     deg_poly: int = 10,
     fit_wl_range: tuple[float, float] = (2100, 2440),
     random_seed: Optional[int] = None,
+    use_l2a_mask: bool = False,
 ) -> dict:
     """Plume vetting for an EMIT scene — convenience wrapper around :func:`compute`.
 
@@ -331,6 +357,10 @@ def compute_emit(
     ``emit_image``, builds the LUT-derived target signature via
     :func:`~marshsi.emit.retrieval_upv_emit.load_target_spectrum_mf`, and delegates
     to :func:`compute`.
+
+    The mask passed to :func:`compute` is the union of (a) non-finite / fill-value
+    pixels in the radiance, (b) non-finite / fill-value pixels in the CMF, and
+    optionally (c) the EMIT L2A cloud + surface-water mask. See ``use_l2a_mask``.
 
     Args:
         emit_image: Loaded EMIT scene (provides radiance, wavelengths, mask).
@@ -347,6 +377,11 @@ def compute_emit(
         deg_poly: Polynomial continuum degree for the spectral fit.
         fit_wl_range: (lo, hi) wavelength window in nm for the spectral fit.
         random_seed: Seed for reproducible pixel-pair selection.
+        use_l2a_mask: When True, OR the EMIT L2A cloud + surface-water mask
+            (bands 0-2) into the mask passed to :func:`compute`. Defaults to
+            False because the EMIT L2A cloud mask is known to be unreliable
+            (frequently flags real plume pixels). When False, only the
+            radiance/CMF invalidity mask is applied.
 
     Returns:
         Same dict as :func:`compute` — keyed by polygon index, each value contains
@@ -357,27 +392,43 @@ def compute_emit(
     if target_signature is None:
         target_signature = load_target_spectrum_mf(emit_image) * SCALE_TARGET_PPB_TO_PPMxM
 
-    # Build cloud + surface-water mask (bands 0-2 of the L2A mask)
-    mask_raw = np.array(emit_image.nc_ds_l2amask["mask"])
-    clouds_and_surface_water_mask = np.sum(mask_raw[..., :3], axis=-1) > 0
-    clouds_mask_geo = emit_image.georreference(clouds_and_surface_water_mask, fill_value_default=True)
-
-    # Load radiance and reshape to (H, W, B); replace fill with 0
+    # Load radiance and reshape to (H, W, B). Keep the raw array around so we
+    # can build the invalidity mask from it before replacing fills with 0.
+    # TODO: it may be worth loading only the wavelengths used by the vetting
+    # code (those outside the methane absorption window plus the fit window) —
+    # this would also let the invalidity check be band-subset-specific.
     data = emit_image.load(as_reflectance=False)
-    rdn = np.transpose(data.values, (1, 2, 0))   # (B, H, W) → (H, W, B)
-    rdn = np.where(rdn == -9999, 0, rdn)
-
-    wavelengths = np.asarray(emit_image.wavelengths)
+    rdn_raw = np.transpose(data.values, (1, 2, 0))   # (B, H, W) → (H, W, B)
 
     # Reproject CMF to the radiance grid if extents differ
     if not cmf.same_extent(data):
         cmf = read.read_reproject_like(cmf, data)
 
+    # Build the mask required by compute()'s contract: pixels with non-finite
+    # or fill-value radiance, plus pixels with non-finite or fill-value CMF.
+    # Optionally OR in the L2A cloud + surface-water mask (off by default).
+    rdn_invalid = (
+        np.any(~np.isfinite(rdn_raw), axis=-1)
+        | np.any(rdn_raw == EMIT_RADIANCE_FILL_VALUE, axis=-1)
+    )
+    cmf_invalid = ~np.isfinite(cmf.values) | (cmf.values == cmf.fill_value_default)
+    mask = rdn_invalid | cmf_invalid
+
+    if use_l2a_mask:
+        mask_raw = np.array(emit_image.nc_ds_l2amask["mask"])
+        l2a_mask = np.sum(mask_raw[..., :3], axis=-1) > 0
+        l2a_mask_geo = emit_image.georreference(l2a_mask, fill_value_default=True)
+        mask = mask | l2a_mask_geo.values
+
+    rdn = np.where(rdn_raw == EMIT_RADIANCE_FILL_VALUE, 0, rdn_raw)
+
+    wavelengths = np.asarray(emit_image.wavelengths)
+
     return compute(
         radiance=rdn,
         wavelengths=wavelengths,
         cmf=cmf,
-        clouds_and_surface_water_mask=clouds_mask_geo.values,
+        clouds_and_surface_water_mask=mask,
         target_signature=target_signature,
         polygons=polygons,
         mf_threshold=mf_threshold,
@@ -430,29 +481,38 @@ def compute_prisma(
         Same dict as :func:`compute`.
     """
 
-    # PRISMA raw SWIR is loaded in (column, row, band); transpose to (row, col, band)
+    # PRISMA raw SWIR is loaded in (column, row, band); transpose to (row, col, band).
+    # TODO: it may be worth loading only the wavelengths used by the vetting
+    # code (those outside the methane absorption window plus the fit window).
     rdn_raw = np.transpose(np.asarray(pi.load_raw(swir_flag=True)), (1, 0, 2))
     rdn_geo = griddata.read_to_crs(
-        rdn_raw.astype(np.float64), 
-        lons=pi.lons, 
-        lats=pi.lats, 
+        rdn_raw.astype(np.float64),
+        lons=pi.lons,
+        lats=pi.lats,
         resolution_dst=30,
-        fill_value_default=-20,
-        dst_crs=cmf.crs
+        fill_value_default=PRISMA_RADIANCE_FILL_VALUE,
+        dst_crs=cmf.crs,
     )
-    
+
     if not cmf.same_extent(rdn_geo):
         cmf = read.read_reproject_like(cmf, rdn_geo)
-    
-    invalid = np.any(~np.isfinite(rdn_geo.values), axis=0) | np.any(rdn_geo.values <= -20, axis=0)
-    
-    # Transpose radiance to (H, W, B) and replace fill values with 0
+
+    # Build the mask required by compute()'s contract: pixels with non-finite
+    # or fill-value radiance, plus pixels with non-finite or fill-value CMF.
+    # rdn_geo.values has shape (B, H, W); reduce along the band axis.
+    rdn_invalid = np.any(~np.isfinite(rdn_geo.values), axis=0) | np.any(
+        rdn_geo.values <= PRISMA_RADIANCE_FILL_VALUE, axis=0
+    )
+    cmf_invalid = ~np.isfinite(cmf.values) | (cmf.values == cmf.fill_value_default)
+    mask = rdn_invalid | cmf_invalid
+
+    # Transpose radiance to (H, W, B) and replace fill / non-finite values with 0
     rdn_vals = np.transpose(rdn_geo.values, (1, 2, 0))
     rdn_vals = np.where(np.isfinite(rdn_vals), rdn_vals, 0.0)
-    rdn_vals = np.where(rdn_vals <= -20, 0.0, rdn_vals)
-    
+    rdn_vals = np.where(rdn_vals <= PRISMA_RADIANCE_FILL_VALUE, 0.0, rdn_vals)
+
     wavelengths = np.mean(np.asarray(pi.wavelength_swir), axis=0)
-    
+
     if target_signature is None:
         target_signature = (
             target_spectrum_prisma(pi, swir_flag=True) * SCALE_TARGET_PPB_TO_PPMxM
@@ -460,12 +520,11 @@ def compute_prisma(
         # average the target signature.
         target_signature = np.mean(target_signature, axis=0)  # (M, B) → (B,)
 
-    
     return compute(
         radiance=rdn_vals,
         wavelengths=wavelengths,
         cmf=cmf,
-        clouds_and_surface_water_mask=invalid,
+        clouds_and_surface_water_mask=mask,
         target_signature=target_signature,
         polygons=polygons,
         mf_threshold=mf_threshold,
@@ -522,7 +581,9 @@ def compute_enmap(
 
     data_swir = enmapi.load_product("SPECTRAL_IMAGE_SWIR")
     fill_val = data_swir.fill_value_default
-    # apply RPC EnMAP (needed to have colocated data with the plume)
+    # apply RPC EnMAP (needed to have colocated data with the plume).
+    # TODO: it may be worth loading only the wavelengths used by the vetting
+    # code (those outside the methane absorption window plus the fit window).
     data_swir = read.read_rpcs(
             data_swir.values.astype(np.float32),
             rpcs=enmapi.rpcs_swir,
@@ -533,22 +594,25 @@ def compute_enmap(
 
     rdn = np.transpose(data_swir.values, (1, 2, 0)).astype(np.float64)
 
-    # np.all catches edge pixels where every band equals the fill value (RPC warp padding).
-    # np.isfinite catches NaN/inf from any remaining bad values.
-    invalid_mask = np.any(~np.isfinite(rdn), axis=-1) | np.all(rdn == fill_val, axis=-1)
-    rdn[invalid_mask] = 0.0
+    if not cmf.same_extent(data_swir):
+        cmf = read.read_reproject_like(cmf, data_swir)
+
+    # Build the mask required by compute()'s contract: pixels with non-finite
+    # or fill-value radiance, plus pixels with non-finite or fill-value CMF.
+    rdn_invalid = np.any(~np.isfinite(rdn), axis=-1) | np.any(rdn == fill_val, axis=-1)
+    cmf_invalid = ~np.isfinite(cmf.values) | (cmf.values == cmf.fill_value_default)
+    mask = rdn_invalid | cmf_invalid
+
+    rdn[rdn == fill_val] = 0.0
     rdn = np.where(~np.isfinite(rdn), 0.0, rdn)
 
     wavelengths = np.asarray(enmapi.wl_center["swir"])
-
-    if not cmf.same_extent(data_swir):
-        cmf = read.read_reproject_like(cmf, data_swir)
 
     return compute(
         radiance=rdn,
         wavelengths=wavelengths,
         cmf=cmf,
-        clouds_and_surface_water_mask=invalid_mask,
+        clouds_and_surface_water_mask=mask,
         target_signature=target_signature,
         polygons=polygons,
         mf_threshold=mf_threshold,

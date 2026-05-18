@@ -3,25 +3,54 @@
 # Plume vetting paper: https://www.sciencedirect.com/science/article/pii/S0034425725002640
 # Identification of false methane plumes for orbital imaging spectrometers: A case study with EMIT
 # Chuchu Xiang, David R. Thompson, Robert O. Green, Jay E. Fahlen, Andrew K. Thorpe, Philip G. Brodrick, Red Willow Coleman, Amanda M. Lopez, Clayton D. Elder
-import os 
 import glob
-from functools import partial
+import os
+import pickle
 import shutil
 import time
-import pickle
+from functools import partial
+
+import matplotlib.gridspec as gridspec
 import numpy as np
-from scipy import optimize
-from scipy.spatial.distance import cdist
 import scipy.optimize as opt
 from matplotlib import pyplot as plt
-import matplotlib.gridspec as gridspec
+from scipy import optimize
+from scipy.spatial.distance import cdist
+
 #from sklearn.metrics import mean_squared_error
+
+def _check_radiance_rows_valid(arr: np.ndarray, name: str) -> None:
+    """Raise a descriptive ValueError if any row is non-finite or all-zero.
+
+    These conditions break the L1/L2 normalisations used to build
+    ``similarity_matrix`` further down (division by zero → NaN; NaN propagation
+    → NaN matrix → ``linear_sum_assignment`` raises a much less informative
+    ``matrix contains invalid numeric entries``).
+
+    Triggering this check means the
+    ``clouds_and_surface_water_mask`` passed to
+    :func:`marshsi.plume_vetting.compute` does not cover every non-finite /
+    fill-value pixel in the radiance — see the contract documented there.
+    """
+    non_finite_rows = int(np.sum(~np.all(np.isfinite(arr), axis=1)))
+    zero_rows = int(np.sum(np.sum(np.abs(arr), axis=1) == 0))
+    if non_finite_rows == 0 and zero_rows == 0:
+        return
+    raise ValueError(
+        f"{name} has {non_finite_rows} non-finite row(s) and {zero_rows} "
+        f"all-zero row(s) out of {arr.shape[0]} total. This means the "
+        f"clouds_and_surface_water_mask passed to "
+        f"marshsi.plume_vetting.compute() does not flag every non-finite / "
+        f"fill-value pixel in the radiance — see the docstring of "
+        f"marshsi.plume_vetting.compute for the required contract."
+    )
+
 
 def create_folders_for_results():
     frames_folder = 'pic'
     results_folder = 'result'
     plot_data_folder = 'plot_data'
-    
+
     for folder in [results_folder, frames_folder, plot_data_folder]:
         if os.path.exists(folder):
             shutil.rmtree(folder)
@@ -52,23 +81,23 @@ def fit_exponential2(wavelengths, epsilon, *coeffs, ac):
     return L0 * np.exp(epsilon * ac)
 
 def calculate_fit(degree, wl, ac, ratio):
-    epsilon_initial = 0.01  
-    poly_initial = [1.0] + [0.0] * degree  
+    epsilon_initial = 0.01
+    poly_initial = [1.0] + [0.0] * degree
     initial_guess = [epsilon_initial] + poly_initial
 
-    lower_bounds = [0] + [-np.inf] * (degree + 1)  
-    upper_bounds = [1] + [np.inf] * (degree + 1)  
-    
+    lower_bounds = [0] + [-np.inf] * (degree + 1)
+    upper_bounds = [1] + [np.inf] * (degree + 1)
+
     # use partial to fix ac while calling fit_exponential
     fit_func = partial(fit_exponential, ac=ac)
 
     popt, _ = opt.curve_fit(fit_func, wl, ratio, p0=initial_guess, bounds=(lower_bounds, upper_bounds))
     optimized_epsilon = popt[0]
-    optimized_coeffs = popt[1:]  
-    
+    optimized_coeffs = popt[1:]
+
     poly = np.polyval(optimized_coeffs, wl)
     fit_sig = poly * np.exp(optimized_epsilon * ac)
-    
+
     return popt, fit_sig
 
 # find the best polynomial degree
@@ -76,32 +105,32 @@ def calculate_best_fit(wl, ac, ratio, max_degree=25):
     best_degree = None
     best_fit_sig = None
     best_popt = None
-    min_mse = np.inf 
+    min_mse = np.inf
 
-    for degree in range(1, max_degree + 1):    
-        initial_guess = [0.1] + [1.0] * (degree + 1)  
-        lower_bounds = [0] + [-np.inf] * (degree + 1)  
+    for degree in range(1, max_degree + 1):
+        initial_guess = [0.1] + [1.0] * (degree + 1)
+        lower_bounds = [0] + [-np.inf] * (degree + 1)
         upper_bounds = [np.inf] * (degree + 2)
-        
+
         fit_func = partial(fit_exponential2, ac=ac)
         try:
             popt, _ = opt.curve_fit(fit_func, wl, ratio, p0=initial_guess, bounds=(lower_bounds, upper_bounds))
             optimized_epsilon = popt[0]
-            optimized_coeffs = popt[1:]  
-            
+            optimized_coeffs = popt[1:]
+
             poly = np.polyval(optimized_coeffs, wl)
             fit_sig = poly * np.exp(optimized_epsilon * ac)
-            
+
             mse = np.mean((ratio - fit_sig) ** 2)
             if mse < min_mse:
                 min_mse = mse
                 best_degree = degree
                 best_fit_sig = fit_sig
                 best_popt = popt
-        
+
         except Exception as e:
             print(f"Error with degree {degree}: {e}")
-            continue  
+            continue
 
     return best_degree, best_popt, best_fit_sig
 
@@ -115,7 +144,7 @@ def get_neighboring_points(top_points, square_size, point_inside_plume, remove_c
         if remove_center_flag==1:
             neighboring_points.remove(point)
         all_neighboring_points.extend(neighboring_points)
-    
+
     all_neighboring_points = list(set(all_neighboring_points)) # remove duplicates
     all_neighboring_points = [(ni, nj) for ni, nj in all_neighboring_points if (ni, nj) in point_inside_plume]
 
@@ -166,7 +195,7 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
         print("high", mf_highest)
         points_inside_plume = [point for point in points_inside_plume if mf[point[1], point[0]] < mf_highest]
 
-    # select the top num_pts points with the highest MF values 
+    # select the top num_pts points with the highest MF values
     sorted_points = sorted(points_inside_plume, key=lambda point: mf[point[1], point[0]], reverse=True)
     num_pts=min(num_pts, len(points_inside_plume))
     if use_all_pts_flag==1:
@@ -183,7 +212,7 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
     top_points = [(y, x) for x, y in top_points] # swap x y to so that it is (row, col)
     if not top_points:
         return None
-    
+
     # define bounds for the region to search for background pixels
     x_coords, y_coords = zip(*top_points)
     x_coords, y_coords = np.array(x_coords), np.array(y_coords)
@@ -203,6 +232,13 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
     valid_indices = np.where(~condition_mask) # select valid background pixels
     B_data = B_data_full[valid_indices[0], valid_indices[1], :]
 
+    # Contract check: target/background rows must be finite and non-zero. If
+    # this fails the caller's mask is inconsistent with the radiance — i.e. the
+    # mask does not flag every non-finite/fill pixel. See the docstring of
+    # ``marshsi.plume_vetting.compute`` for the exact contract.
+    _check_radiance_rows_valid(A_data, "A_data (target)")
+    _check_radiance_rows_valid(B_data, "B_data (background)")
+
     # each row of similarity_matrix corresponds to a target pixel; each column corresponds to a background pixel
     if dist_opt==0:
         similarity_matrix = cdist(A_data, B_data, 'euclidean') # smaller value means higher similarity
@@ -212,7 +248,7 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
         similarity_matrix = cdist(A_data_normalized, B_data_normalized, metric='euclidean')
     elif dist_opt == 2:
         A_norm = A_data / np.linalg.norm(A_data, axis=1, keepdims=True)
-        B_norm = B_data / np.linalg.norm(B_data, axis=1, keepdims=True) # spectral angle 
+        B_norm = B_data / np.linalg.norm(B_data, axis=1, keepdims=True) # spectral angle
         similarity_matrix = np.arccos(np.clip(np.dot(A_norm, B_norm.T), -1.0, 1.0))  # smaller value means higher similarity
     elif dist_opt==3:
         A_norm = A_data / np.linalg.norm(A_data, axis=1, keepdims=True)
@@ -230,14 +266,14 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
     # each element in top_pairs has three components: (x, y) of target pixel, (x ,y) of background pixel, similarity score
     top_pairs = [[top_points[i], original_B_indices[i], similarity_matrix[i, col_ind[i]]] for i in row_ind]
 
-    #avg_similarity = sum(similarity for _, _, similarity in top_pairs) / len(top_pairs) if top_pairs else 0 
+    #avg_similarity = sum(similarity for _, _, similarity in top_pairs) / len(top_pairs) if top_pairs else 0
     all_similarity = [similarity for _, _, similarity in top_pairs] if top_pairs else []
 
-    top_pairs.sort(key=lambda x: x[2]) 
+    top_pairs.sort(key=lambda x: x[2])
     num_pairs_to_select = int(0.5 * len(top_pairs))
-    top_pairs = top_pairs[:num_pairs_to_select]   # choose smallest 50% 
+    top_pairs = top_pairs[:num_pairs_to_select]   # choose smallest 50%
 
-    top_mf = [mf[i, j] for (i, j), _, _, in top_pairs] # MF of target pixels 
+    top_mf = [mf[i, j] for (i, j), _, _, in top_pairs] # MF of target pixels
     avg_top_mf = np.mean([v for v in top_mf if v != -9999])
 
     top_rdns = [rdn[i, j, :] for (i, j), _, _, in top_pairs] # radiance of target pixels
@@ -249,15 +285,15 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
     ratio=avg_top_rdn/avg_low_rdn # target-to-background radiance ratio
 
     top_ind = [(i, j) for (i, j), _, _ in top_pairs] # indices of target pixels
-    
-    save_data=0  
+
+    save_data=0
     if save_data==1: # save data to csv file
        low_mf = [mf[i, j] for _, (i, j), _, in top_pairs] # MF of background pixels
        save_to_csv(wl, top_rdns, low_rdns, top_mf, low_mf, top_pairs, ii)
 
     results = (plume_coord, all_similarity, ratio, top_ind, top_mf, avg_top_mf, avg_in_plume_mf, top_pairs)
-    return results 
-    
+    return results
+
 
 
 def find_translated_pts(pts_inside_contour, pcontour, mask, max_iterations=100, rng=None):
@@ -279,12 +315,12 @@ def find_translated_pts(pts_inside_contour, pcontour, mask, max_iterations=100, 
         translated_pts = [(x + translation_vector[0], y + translation_vector[1]) for x, y in pts_inside_contour]
         translated_contour = [(x + translation_vector[0], y + translation_vector[1]) for x, y in pcontour]
         translated_pts_array = np.array(translated_pts).astype(int)
-        
-        valid_x = (0 <= translated_pts_array[:, 0]) & (translated_pts_array[:, 0] < mask.shape[1])
-        valid_y = (0 <= translated_pts_array[:, 1]) & (translated_pts_array[:, 1] < mask.shape[0])
+
+        valid_x = (translated_pts_array[:, 0] >= 0) & (translated_pts_array[:, 0] < mask.shape[1])
+        valid_y = (translated_pts_array[:, 1] >= 0) & (translated_pts_array[:, 1] < mask.shape[0])
         valid_pts = translated_pts_array[valid_x & valid_y]
 
-        if not np.any(mask[valid_pts[:, 1], valid_pts[:, 0]]):  # check if any of the translated points are within plumes or uniform row/columns in the scene 
+        if not np.any(mask[valid_pts[:, 1], valid_pts[:, 0]]):  # check if any of the translated points are within plumes or uniform row/columns in the scene
            # mask[valid_pts[:, 1], valid_pts[:, 0]] = True  # mask out translated points to avoid overlapping of shifted plumes
             return translated_pts, translated_contour
         iterations += 1
@@ -318,10 +354,10 @@ def load_plume(j, plume_id_list=None):
                 'Confidence': properties.get('Confidence', 'Unknown'),
                 'Plume ID': plume_id,
                 'Sector': properties.get('Sector', 'Unknown'),
-                'Sector Confidence': properties.get('Sector Confidence', 'Unknown').strip()})        
+                'Sector Confidence': properties.get('Sector Confidence', 'Unknown').strip()})
                 print(f"Processed Plume {index}: {plumes[-1]['R1']}, {plumes[-1]['R2']}")
         except Exception as e:
-            print(f"Error with plume {index}: {e}.")          
+            print(f"Error with plume {index}: {e}.")
             continue
     plume_list = {
     'plume_coords': np.array([p['coords'] for p in plumes], dtype=object),
@@ -339,7 +375,7 @@ def load_plume(j, plume_id_list=None):
         save_path = '/store/xiang/dat/plume_list.pkl'
         with open(save_path, 'wb') as f:
             pickle.dump(plume_list, f)
-    
+
     return plume_list
 
 
@@ -368,7 +404,7 @@ def calculate_plume_coords_pix(scene_fid, plume_coords):
                     if glt[0] != 0:
                         try:
                             plume_coords_pix.append((glt[1], glt[0]))
-                        except Exception as e:
+                        except Exception:
                             pdb.set_trace()
     return plume_coords_pix
 
@@ -427,9 +463,9 @@ def calculate_magnitude(ratio, mag_opt):
     elif mag_opt == 3:
         mag = np.mean(np.abs(ratio))
     elif mag_opt == 4:
-        mag = max(ratio)-min(ratio) 
+        mag = max(ratio)-min(ratio)
     elif mag_opt == 5:
-        mag = np.std(ratio)      
+        mag = np.std(ratio)
     return mag
 
 
@@ -438,7 +474,7 @@ def calculate_dist(ratio, sig, dist_opt):
         dist=np.mean(np.abs(ratio - sig))
     if dist_opt==1:
         if np.std(ratio) == 0 or np.std(sig) == 0:
-            dist=-1  # avoid division by zero 
+            dist=-1  # avoid division by zero
         correlation_coefficient = np.corrcoef(ratio, sig)[0, 1]
         dist=1 - correlation_coefficient**2
     return dist
@@ -447,18 +483,18 @@ def calculate_dist(ratio, sig, dist_opt):
 def save_to_csv(wl, top_rdns, low_rdns, top_mf, low_mf, top_pairs, ii):
         num_pixel_pairs = len(top_pairs)
         matrix = np.zeros((len(wl) + 1, 1 + 2 * num_pixel_pairs))
-        matrix[1:, 0] = wl  
+        matrix[1:, 0] = wl
         for index, (top, low, t_mf, l_mf) in enumerate(zip(top_rdns, low_rdns, top_mf, low_mf)):
             matrix[0, 1 + 2*index] = t_mf  # place MF at the top of the column
-            matrix[0, 2 + 2*index] = l_mf  
+            matrix[0, 2 + 2*index] = l_mf
             matrix[1:, 1 + 2*index] = top  # place radiance data below MF
-            matrix[1:, 2 + 2*index] = low  
+            matrix[1:, 2 + 2*index] = low
         np.savetxt(f'{ii}.csv', matrix, delimiter=",", fmt='%g')
         print(f'Data saved to {ii}.csv')
 
 
 def target_background_pixels_figure(mf, top_pairs, orig_contour, frames_folder, ii):
-    fig3, ax = plt.subplots(figsize=(8, 6))  
+    fig3, ax = plt.subplots(figsize=(8, 6))
     label_size = 14
     marker_size=3
     vmax_99th_perc = np.percentile(mf, 99)
@@ -472,10 +508,10 @@ def target_background_pixels_figure(mf, top_pairs, orig_contour, frames_folder, 
     for _, (i, j), _ in top_pairs:
         ax.plot(j, i, 'go', markersize=marker_size, label='Background Pixel')
 
-    x_min = min(min(j for (i, j), _, _ in top_pairs), min(j for _, (i, j), _ in top_pairs)) 
-    x_max = max(max(j for (i, j), _, _ in top_pairs), max(j for _, (i, j), _ in top_pairs)) 
-    y_min = min(min(i for (i, j), _, _ in top_pairs), min(i for _, (i, j), _ in top_pairs)) 
-    y_max = max(max(i for (i, j), _, _ in top_pairs), max(i for _, (i, j), _ in top_pairs)) 
+    x_min = min(min(j for (i, j), _, _ in top_pairs), min(j for _, (i, j), _ in top_pairs))
+    x_max = max(max(j for (i, j), _, _ in top_pairs), max(j for _, (i, j), _ in top_pairs))
+    y_min = min(min(i for (i, j), _, _ in top_pairs), min(i for _, (i, j), _ in top_pairs))
+    y_max = max(max(i for (i, j), _, _ in top_pairs), max(i for _, (i, j), _ in top_pairs))
 
     ax.set_xlim(x_min - 10, x_max + 10)
     ax.set_ylim(y_min - 10, y_max + 10)
@@ -484,7 +520,7 @@ def target_background_pixels_figure(mf, top_pairs, orig_contour, frames_folder, 
     fig3.savefig(os.path.join(frames_folder, f'pix_{ii}.png'), dpi=300)
 
 
-def save_plot_data(plot_data_folder, ii, mf, temp, orig_contour, other_plume_coords, rfl_mean, rfl_std, rdn_mean_target, 
+def save_plot_data(plot_data_folder, ii, mf, temp, orig_contour, other_plume_coords, rfl_mean, rfl_std, rdn_mean_target,
                      rdn_std_target, rdn_mean_background, rdn_std_background, fid, plume_id, r1, r2, cfd, sector, sector_cfd):
     plot_data = {
         'mf': mf,
@@ -509,15 +545,15 @@ def save_plot_data(plot_data_folder, ii, mf, temp, orig_contour, other_plume_coo
     try:
         with open(file_path, 'wb') as file:
             pickle.dump(plot_data, file)
-        
+
     except Exception as e:
-        print(f"Failed to save data: {e}")  
+        print(f"Failed to save data: {e}")
 
 def plume_mask_figure(plume_mask, ii, pics_folder):
     cmap = plt.cm.colors.ListedColormap(['black', 'red'])
     plt.figure(figsize=(8, 6))
-    plt.imshow(plume_mask, cmap=cmap)  
-    plt.colorbar(label='Plume Presence', ticks=[0, 1])  
+    plt.imshow(plume_mask, cmap=cmap)
+    plt.colorbar(label='Plume Presence', ticks=[0, 1])
     plt.title("Plume Mask")
     plt.savefig(os.path.join(pics_folder, f'plumemask_{ii}.png'), dpi=300)
     plt.close()
@@ -530,7 +566,7 @@ def six_panel_figure(ii, pics_folder, plot_data_folder, s, mf, orig_contour, tra
                            orig_ratio, orig_fit_sig, orig_coef,
                            trans_ratio, trans_fit_sig, trans_coef, trans_pairs,
                            orig_dist, perc_dist, orig_cl, perc_cl, save_data_for_plotting):
-       
+
     fig1 = plt.figure(figsize=(20, 15), dpi=300)
     outer_grid = gridspec.GridSpec(2, 3, height_ratios=[1, 1], hspace=0.3, wspace=0.3)
     label_size=14
@@ -542,10 +578,10 @@ def six_panel_figure(ii, pics_folder, plot_data_folder, s, mf, orig_contour, tra
 
     ax.plot(*zip(*orig_contour), color='r', label='Original plume')
     ax.plot(*zip(*trans_contour[index1]), color='g', label='Shifted plume wt smallest norm dist')
-    ax.plot(*zip(*trans_contour[index2]), color='m', label='Shifted plume wt highest MF')      
+    ax.plot(*zip(*trans_contour[index2]), color='m', label='Shifted plume wt highest MF')
 
     if other_plume_coords:
-        for j in range(0, len(other_plume_coords)):                       
+        for j in range(0, len(other_plume_coords)):
             other_plume_coord =  other_plume_coords[j]
             if j == 0:
                 ax.plot(*zip(*other_plume_coord), color='b', label='Other plumes')
@@ -568,8 +604,8 @@ def six_panel_figure(ii, pics_folder, plot_data_folder, s, mf, orig_contour, tra
         textcoords="offset points",
         xytext=(-80, 80),  # rightward offset from the edge
         fontsize=14,
-        ha='left',  
-        va='center',  
+        ha='left',
+        va='center',
         bbox=dict(boxstyle="round,pad=0.3", edgecolor='gray', facecolor='none'),
         annotation_clip=False)
 
@@ -638,21 +674,21 @@ def six_panel_figure(ii, pics_folder, plot_data_folder, s, mf, orig_contour, tra
         f'Normalized distrance percentile: {perc_dist:.1f}%\n'
         f'Concentration length: {orig_cl:.0f}\n'
         f'Concentration length percentile: {perc_cl:.1f}%',
-        xy=(0.5, 1),  
+        xy=(0.5, 1),
         xycoords='axes fraction',
         textcoords="offset points",
-        xytext=(-100, 60),  
+        xytext=(-100, 60),
         fontsize=14,
-        ha='left',  
-        va='center', 
+        ha='left',
+        va='center',
         bbox=dict(boxstyle="round,pad=0.3", edgecolor='gray', facecolor='none'),
         annotation_clip=False)
-    
+
     if save_data_for_plotting:
-        save_plot_data(plot_data_folder, ii, mf, temp, orig_contour, other_plume_coords, rfl_mean, rfl_std, rdn_mean_target, 
+        save_plot_data(plot_data_folder, ii, mf, temp, orig_contour, other_plume_coords, rfl_mean, rfl_std, rdn_mean_target,
             rdn_std_target, rdn_mean_background, rdn_std_background, fid, plume_id, r1, r2, cfd, sector, sector_cfd)
 
-                
+
     # panels 4  5  6: model versus measuement for original plume and two shifted plumes
     for f in [0,1,2]:
         inner_grid = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=outer_grid[1, f], height_ratios=[1, 1], hspace=0.1)
@@ -677,17 +713,17 @@ def six_panel_figure(ii, pics_folder, plot_data_folder, s, mf, orig_contour, tra
             oc=trans_coef[index2]
             top_pairs=trans_pairs[index2]
             ax_upper.set_title('Shifted plume with highest MF', fontsize=label_size)
-        
+
         line1, =ax_upper.plot(wl, y1, label='Measurement')
         line2, =ax_upper.plot(wl, y2, label='Model')
-        
+
         color1 = line1.get_color()
         color2 = line2.get_color()
-        
+
         yy= np.polyval(oc[1:], wl)  # continuum function
         ax_upper.plot(wl, yy, label='Continuum function', color='green', linestyle='--', alpha=0.5)
 
-        ax_lower = fig1.add_subplot(inner_grid[1])          
+        ax_lower = fig1.add_subplot(inner_grid[1])
         y1=y1/yy
         y2=y2/yy
         ax_lower.plot(wl, y1, label='Measurement / continuum function', color=color1, linestyle='--')
@@ -705,7 +741,7 @@ def six_panel_figure(ii, pics_folder, plot_data_folder, s, mf, orig_contour, tra
             combined_labels = labels_upper + labels_lower
             ax_upper.legend(combined_handles, combined_labels, loc='upper center', bbox_to_anchor=(-0.08, 1.8), fontsize=14)
         lines, labels = ax_lower.get_legend_handles_labels()
-               
+
         dd = [rfl[i, j, ind_fit] for (i, j), _, _, in top_pairs]
         dd_all = np.concatenate(dd)
         mean_of_rfl = np.mean(dd_all)
@@ -726,22 +762,22 @@ def six_panel_figure(ii, pics_folder, plot_data_folder, s, mf, orig_contour, tra
         mean_of_sim = np.mean(dd_all)
         std_of_sim = np.std(dd_all)
 
-        ax_lower.annotate(  
+        ax_lower.annotate(
         f'MF: {mean_of_mf:.0f} ± {std_of_mf:.0f}\n'
         f'Sim: {mean_of_sim:.5f} ± {std_of_sim:.5f}\n'
         f'RDN: {mean_of_rdn:.3f} ± {std_of_rdn:.3f}\n'
         f'RFL: {mean_of_rfl:.3f} ± {std_of_rfl:.3f}\n'
         f'Dist: {dist:.4f}\n'
         f'Norm dist: {ndist:.3f}',
-        xy=(0, 0),  
+        xy=(0, 0),
         xycoords='axes fraction',
         textcoords="offset points",
-        xytext=(100, -110),  
+        xytext=(100, -110),
         fontsize=12,
-        ha='right',  
-        va='bottom',  
+        ha='right',
+        va='bottom',
         bbox=dict(boxstyle="round,pad=0.3", edgecolor='gray', facecolor='none'),
         annotation_clip=False)
 
     fig1.text(0.02, 0.98, f'{ii}', transform=plt.gcf().transFigure, fontsize=14, va='top', ha='left')
-    fig1.savefig(os.path.join(pics_folder, f'frame_{ii}.png'), dpi=300) 
+    fig1.savefig(os.path.join(pics_folder, f'frame_{ii}.png'), dpi=300)
