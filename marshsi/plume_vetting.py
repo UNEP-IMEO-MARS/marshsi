@@ -449,13 +449,41 @@ def compute_emit(
     # TODO: it may be worth loading only the wavelengths used by the vetting
     # code (those outside the methane absorption window plus the fit window) —
     # this would also let the invalidity check be band-subset-specific.
-    data = emit_image.load(as_reflectance=False)
+    #
+    # NOTE: we deliberately bypass emit_image.load() (which wraps
+    # load_raw + georreference) and call the two stages explicitly so we can
+    # log the raw sensor-frame radiance before GLT orthorectification. This is
+    # diagnostic: it tells us whether the data is already zero/fill at the
+    # netCDF level (upstream/state bug) or whether the GLT step is producing
+    # zeros (orthorectification bug).
+    # load_raw() default transpose=True returns (C, H, W), which is what
+    # emit_image.georreference() expects. Stats reduced along axis 0 (bands).
+    rdn_sensor_arr = np.asarray(emit_image.load_raw())  # (C, H, W)
+    # Diagnostic format matches marshsi.emit.retrieval_upv_emit.AT_MF_total_EMIT
+    # and marshsi.emit.mag1c_emit so the three call sites can be correlated.
+    import os as _os
+    _p = emit_image.filename
+    logger.debug(
+        f"[compute_emit.load_raw] file={_p} "
+        f"size={_os.path.getsize(_p)} mtime={_os.path.getmtime(_p):.1f} "
+        f"shape={rdn_sensor_arr.shape}, dtype={rdn_sensor_arr.dtype}, "
+        f"min={float(rdn_sensor_arr.min())}, max={float(rdn_sensor_arr.max())}, "
+        f"n_neg9999={int(np.sum(rdn_sensor_arr == EMIT_RADIANCE_FILL_VALUE))}, "
+        f"n_nan={int(np.sum(~np.isfinite(rdn_sensor_arr)))}, "
+        f"n_all_zero_pixels={int(np.sum(np.all(rdn_sensor_arr == 0, axis=0)))}, "
+        f"n_pixels_total={int(rdn_sensor_arr.shape[1] * rdn_sensor_arr.shape[2])}"
+    )
+
+    data = emit_image.georreference(
+        rdn_sensor_arr, fill_value_default=EMIT_RADIANCE_FILL_VALUE
+    )
     rdn_raw = np.transpose(data.values, (1, 2, 0))   # (B, H, W) → (H, W, B)
 
     logger.debug(
         f"[compute_emit] emit_image.crs={getattr(emit_image, 'crs', None)}, "
         f"data.crs={data.crs}, data.transform={data.transform}, "
         f"rdn_raw shape={rdn_raw.shape}, dtype={rdn_raw.dtype}, "
+        f"rdn_raw min={float(rdn_raw.min())}, max={float(rdn_raw.max())}, "
         f"n_neg9999={int(np.sum(rdn_raw == EMIT_RADIANCE_FILL_VALUE))}, "
         f"n_nan={int(np.sum(~np.isfinite(rdn_raw)))}, "
         f"n_all_zero_pixels={int(np.sum(np.all(rdn_raw == 0, axis=-1)))}, "

@@ -133,6 +133,18 @@ def AT_MF_total_EMIT(
     k_arr_classic = k_arr_extended[indexes_classic_within_extended]
 
     img = emit_image_extended_wavelengths.load_raw(transpose=False)  # (rows, cols, bands)
+    # Diagnostic: track what bytes load_raw saw at this stage. Matched against
+    # the same line in marshsi.emit.mag1c_emit and marshsi.plume_vetting.compute_emit
+    # to pinpoint where radiance turns to zeros across the pipeline.
+    if logger is not None:
+        _p = emit_image_extended_wavelengths.filename
+        logger.debug(
+            f"[AT_MF_total_EMIT.load_raw] file={_p} "
+            f"size={os.path.getsize(_p)} mtime={os.path.getmtime(_p):.1f} "
+            f"shape={img.shape} dtype={img.dtype} "
+            f"min={float(img.min())} max={float(img.max())} "
+            f"n_neg9999={int(np.sum(img == fill_value_default))}"
+        )
     img_masked = img.copy().astype(np.float64)
     img_masked[img_masked == fill_value_default] = np.nan
     if mask_water:

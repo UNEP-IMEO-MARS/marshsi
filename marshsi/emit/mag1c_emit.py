@@ -2,6 +2,8 @@
 # https://colab.research.google.com/drive/1hVcLoY3R0QryLVSLG6C4jTSG-4Jgg_4c?usp=sharing
 # The original mag1c code is here: https://github.com/markusfoote/mag1c/blob/master/mag1c/mag1c.py#LL579C71-L579C83
 
+import logging
+import os
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -31,6 +33,7 @@ def mag1c_emit(
     column_step: Optional[int] = None,
     georeferenced: bool = True,
     display_pbar: bool = True,
+    logger: Optional[logging.Logger] = None,
 ) -> Tuple[Union[GeoTensor, np.array], Union[GeoTensor, np.ndarray]]:
     """
     Run mag1c filter on an EMITImage object.
@@ -45,6 +48,8 @@ def mag1c_emit(
             mag1c filter by column. None runs the mag1c filter in all the image.
         georeferenced (bool, optional): If True, the output is a GeoTensor. Defaults to True.
         display_pbar (bool, optional): If True, display a progress bar. Defaults to True.
+        logger (Optional[logging.Logger], optional): Logger to use for diagnostic
+            messages. Defaults to None.
 
     Returns:
         Tuple[Union[GeoTensor,np.array], Union[GeoTensor,np.array]]: Tuple with the mag1c filter and the albedo.
@@ -64,6 +69,19 @@ def mag1c_emit(
     spec = torch.tensor(target[:, 1], device=device)
 
     raw_data = ei.load_raw(transpose=False)  # (rows, cols, bands)
+    # Diagnostic: track what bytes load_raw saw at this stage. Matched against
+    # the same line in marshsi.emit.retrieval_upv_emit.AT_MF_total_EMIT and
+    # marshsi.plume_vetting.compute_emit to pinpoint where radiance turns
+    # to zeros across the pipeline.
+    if logger is not None:
+        _p = ei.filename
+        logger.debug(
+            f"[mag1c_emit.load_raw] file={_p} "
+            f"size={os.path.getsize(_p)} mtime={os.path.getmtime(_p):.1f} "
+            f"shape={raw_data.shape} dtype={raw_data.dtype} "
+            f"min={float(raw_data.min())} max={float(raw_data.max())} "
+            f"n_neg9999={int(np.sum(raw_data == ei.fill_value_default))}"
+        )
     invalid = np.any(raw_data == ei.fill_value_default, axis=-1)  # (rows, cols)
 
     mag1c_output = np.full(
