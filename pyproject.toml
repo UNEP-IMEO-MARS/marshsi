@@ -38,6 +38,7 @@ mypy = "^1.5.1"
 pre-commit = "^3.4.0"
 tox = "^4.11.1"
 ipykernel = "^6.30.0"
+fsspec = ">=2024"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"
