@@ -132,6 +132,7 @@ def compute(
     min_polygon_size: int = 0,
     fit_wl_range: tuple[float, float] = (2100, 2440),
     random_seed: Optional[int] = None,
+    logger=None,
 ) -> dict:
     """Compute plume-vetting scores for a list of candidate polygons.
 
@@ -152,10 +153,10 @@ def compute(
                     | (cmf.values == cmf.fill_value_default)
                 )
 
-            If this contract is broken, :func:`get_radiance_ratio` will raise a
-            descriptive ``ValueError`` when it detects all-zero or non-finite
-            rows in the target / background radiance arrays — see the per-sensor
-            wrappers (:func:`compute_emit`, :func:`compute_prisma`,
+            If this contract is broken, :func:`get_radiance_ratio` logs a
+            descriptive error and returns ``None`` for the offending polygon,
+            which is then skipped (other polygons are still scored). See the
+            per-sensor wrappers (:func:`compute_emit`, :func:`compute_prisma`,
             :func:`compute_enmap`) for reference implementations.
         target_signature: Methane target spectrum in ppm·m on the same wavelength
             grid as ``wavelengths``. Either shape ``(B,)`` (same signature for every
@@ -171,6 +172,9 @@ def compute(
         fit_wl_range: (lo, hi) wavelength range in nm used for the spectral fit.
         random_seed: Seed for the local RandomState so runs are reproducible.
             None means non-deterministic (new seed each call).
+        logger: Loguru-compatible logger. If None, uses the module-level loguru
+            logger. Debug messages trace scene-level stats and per-polygon
+            iteration; error messages signal mask-contract violations.
 
     Returns:
         dict keyed by polygon index. Each value is a dict with keys:
@@ -179,6 +183,22 @@ def compute(
         Polygons that are too small or produce no valid pairs are omitted.
     """
     rng = np.random.RandomState(random_seed)
+    if logger is None:
+        from loguru import logger as logger
+
+    # Scene-level diagnostics — useful for cross-checking that the caller has
+    # passed the same data the script-level debug observed.
+    logger.debug(
+        f"[compute] scene: radiance shape={radiance.shape}, "
+        f"cmf shape={cmf.values.shape}, cmf.crs={cmf.crs}, "
+        f"cmf.fill_value_default={cmf.fill_value_default}, "
+        f"n_polygons={len(polygons)}, n_mask_True={int(clouds_and_surface_water_mask.sum())}"
+    )
+    logger.debug(
+        f"[compute] radiance: min={float(radiance.min())}, max={float(radiance.max())}, "
+        f"n_all_zero_pixels={int(np.all(radiance == 0, axis=-1).sum())}, "
+        f"n_any_nan_pixels={int(np.any(~np.isfinite(radiance), axis=-1).sum())}"
+    )
 
     # Prepare CMF: replace fill values with 0 so they don't affect masks/stats
     cmf = cmf.copy()
@@ -221,7 +241,28 @@ def compute(
 
         number_of_pixels, plume_mask = how_many_pixels_does_polygon_occupy(polygon, cmf)
         if number_of_pixels <= min_polygon_size:
+            logger.debug(
+                f"[compute pol_idx={pol_idx}] skip: only {int(number_of_pixels)} "
+                f"in-plume pixels (<= min_polygon_size={min_polygon_size})"
+            )
             continue
+
+        # Per-polygon diagnostics. radiance[plume_mask_bool] is the polygon's
+        # post-fill-substitution radiance; all-zero rows here are pixels that
+        # were originally fill in at least one band (caught by the contract
+        # mask). cmf has already had fill substituted to 0 above.
+        plume_mask_bool = plume_mask.astype(bool)
+        rdn_in_poly = radiance[plume_mask_bool]
+        cmf_in_poly = mf_values[plume_mask_bool]
+        n_all_zero_in_poly = int(np.all(rdn_in_poly == 0, axis=-1).sum())
+        logger.debug(
+            f"[compute pol_idx={pol_idx}] in_plume_pixels={int(number_of_pixels)}, "
+            f"rdn mean={float(rdn_in_poly.mean()):.4f} (across all bands), "
+            f"cmf mean={float(cmf_in_poly.mean()):.4f}, "
+            f"cmf max={float(cmf_in_poly.max()):.4f}, "
+            f"n_all_zero_rdn_in_poly={n_all_zero_in_poly}, "
+            f"polygon_bounds={polygon.bounds}"
+        )
 
         combined_mask, background_mask = compute_masks(
             mf_values, mf_threshold,
@@ -240,8 +281,13 @@ def compute(
             combined_mask, background_mask, plume_mask,
             1,  # dist_opt=1: L1-normalised similarity
             rng=rng,
+            logger=logger,
         )
         if results is None:
+            logger.debug(
+                f"[compute pol_idx={pol_idx}] skipped (get_radiance_ratio "
+                f"returned None — see error logs above for the reason)"
+            )
             continue
 
         _contour_coord, _similarity, ratio, _top_ind, _top_mf, _avg_top_mf, _avg_in_plume_mf, top_pairs = results
@@ -350,6 +396,7 @@ def compute_emit(
     fit_wl_range: tuple[float, float] = (2100, 2440),
     random_seed: Optional[int] = None,
     use_l2a_mask: bool = False,
+    logger=None,
 ) -> dict:
     """Plume vetting for an EMIT scene — convenience wrapper around :func:`compute`.
 
@@ -382,11 +429,16 @@ def compute_emit(
             False because the EMIT L2A cloud mask is known to be unreliable
             (frequently flags real plume pixels). When False, only the
             radiance/CMF invalidity mask is applied.
+        logger: Loguru-compatible logger. Passed through to :func:`compute`.
+            If None, uses the module-level loguru logger.
 
     Returns:
         Same dict as :func:`compute` — keyed by polygon index, each value contains
         ``D_norm``, ``alpha_con_len``, and the diagnostic arrays for :func:`plot_vetting`.
     """
+
+    if logger is None:
+        from loguru import logger as logger
 
     # Build target signature from LUT if not supplied
     if target_signature is None:
@@ -400,9 +452,33 @@ def compute_emit(
     data = emit_image.load(as_reflectance=False)
     rdn_raw = np.transpose(data.values, (1, 2, 0))   # (B, H, W) → (H, W, B)
 
+    logger.debug(
+        f"[compute_emit] emit_image.crs={getattr(emit_image, 'crs', None)}, "
+        f"data.crs={data.crs}, data.transform={data.transform}, "
+        f"rdn_raw shape={rdn_raw.shape}, dtype={rdn_raw.dtype}, "
+        f"n_neg9999={int(np.sum(rdn_raw == EMIT_RADIANCE_FILL_VALUE))}, "
+        f"n_nan={int(np.sum(~np.isfinite(rdn_raw)))}, "
+        f"n_all_zero_pixels={int(np.sum(np.all(rdn_raw == 0, axis=-1)))}, "
+        f"data.fill_value_default={data.fill_value_default}"
+    )
+    logger.debug(
+        f"[compute_emit] cmf.crs={cmf.crs}, cmf.transform={cmf.transform}, "
+        f"cmf shape={cmf.values.shape}, cmf.fill_value_default={cmf.fill_value_default}, "
+        f"cmf min={float(cmf.values.min())}, cmf max={float(cmf.values.max())}, "
+        f"n_cmf_fill={int(np.sum(cmf.values == cmf.fill_value_default))}, "
+        f"same_extent={cmf.same_extent(data)}"
+    )
+
     # Reproject CMF to the radiance grid if extents differ
     if not cmf.same_extent(data):
+        logger.debug("[compute_emit] cmf differs in extent → reprojecting via read_reproject_like")
         cmf = read.read_reproject_like(cmf, data)
+        logger.debug(
+            f"[compute_emit] cmf after reproject: shape={cmf.values.shape}, "
+            f"fill_value_default={cmf.fill_value_default}, "
+            f"min={float(cmf.values.min())}, max={float(cmf.values.max())}, "
+            f"n_fill={int(np.sum(cmf.values == cmf.fill_value_default))}"
+        )
 
     # Build the mask required by compute()'s contract: pixels with non-finite
     # or fill-value radiance, plus pixels with non-finite or fill-value CMF.
@@ -419,6 +495,12 @@ def compute_emit(
         l2a_mask = np.sum(mask_raw[..., :3], axis=-1) > 0
         l2a_mask_geo = emit_image.georreference(l2a_mask, fill_value_default=True)
         mask = mask | l2a_mask_geo.values
+
+    logger.debug(
+        f"[compute_emit] mask built: rdn_invalid={int(rdn_invalid.sum())}, "
+        f"cmf_invalid={int(cmf_invalid.sum())}, total mask True={int(mask.sum())} "
+        f"of {mask.size} pixels ({100.0 * mask.sum() / mask.size:.2f}%)"
+    )
 
     rdn = np.where(rdn_raw == EMIT_RADIANCE_FILL_VALUE, 0, rdn_raw)
 
@@ -438,6 +520,7 @@ def compute_emit(
         min_polygon_size=min_polygon_size,
         fit_wl_range=fit_wl_range,
         random_seed=random_seed,
+        logger=logger,
     )
 
 
@@ -453,6 +536,7 @@ def compute_prisma(
     deg_poly: int = 10,
     fit_wl_range: tuple[float, float] = (2100, 2440),
     random_seed: Optional[int] = None,
+    logger=None,
 ) -> dict:
     """Plume vetting for a PRISMA scene — convenience wrapper around :func:`compute`.
 
@@ -534,6 +618,7 @@ def compute_prisma(
         min_polygon_size=min_polygon_size,
         fit_wl_range=fit_wl_range,
         random_seed=random_seed,
+        logger=logger,
     )
 
 
@@ -549,6 +634,7 @@ def compute_enmap(
     deg_poly: int = 10,
     fit_wl_range: tuple[float, float] = (2100, 2440),
     random_seed: Optional[int] = None,
+    logger=None,
 ) -> dict:
     """Plume vetting for an EnMAP scene — convenience wrapper around :func:`compute`.
 
@@ -622,4 +708,5 @@ def compute_enmap(
         min_polygon_size=min_polygon_size,
         fit_wl_range=fit_wl_range,
         random_seed=random_seed,
+        logger=logger,
     )

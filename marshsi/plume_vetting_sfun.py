@@ -19,31 +19,37 @@ from scipy.spatial.distance import cdist
 
 #from sklearn.metrics import mean_squared_error
 
-def _check_radiance_rows_valid(arr: np.ndarray, name: str) -> None:
-    """Raise a descriptive ValueError if any row is non-finite or all-zero.
+def _check_radiance_rows_valid(arr: np.ndarray, name: str, logger=None) -> bool:
+    """Return True if rows are all finite and non-zero, else log error and return False.
 
-    These conditions break the L1/L2 normalisations used to build
-    ``similarity_matrix`` further down (division by zero → NaN; NaN propagation
-    → NaN matrix → ``linear_sum_assignment`` raises a much less informative
+    Non-finite or all-zero rows would break the L1/L2 normalisations used to
+    build ``similarity_matrix`` (division by zero → NaN; NaN propagation → NaN
+    matrix → ``linear_sum_assignment`` raises a much less informative
     ``matrix contains invalid numeric entries``).
 
-    Triggering this check means the
-    ``clouds_and_surface_water_mask`` passed to
+    A False return signals to the caller that the polygon must be skipped. The
+    caller (``get_radiance_ratio``) then returns ``None`` so ``compute()``
+    iterates to the next polygon — letting us locate which polygon caused the
+    contract violation without aborting the whole tile. Triggering this still
+    means the ``clouds_and_surface_water_mask`` passed to
     :func:`marshsi.plume_vetting.compute` does not cover every non-finite /
     fill-value pixel in the radiance — see the contract documented there.
     """
     non_finite_rows = int(np.sum(~np.all(np.isfinite(arr), axis=1)))
     zero_rows = int(np.sum(np.sum(np.abs(arr), axis=1) == 0))
     if non_finite_rows == 0 and zero_rows == 0:
-        return
-    raise ValueError(
+        return True
+    if logger is None:
+        from loguru import logger as logger
+    logger.error(
         f"{name} has {non_finite_rows} non-finite row(s) and {zero_rows} "
-        f"all-zero row(s) out of {arr.shape[0]} total. This means the "
-        f"clouds_and_surface_water_mask passed to "
+        f"all-zero row(s) out of {arr.shape[0]} total. Skipping this polygon. "
+        f"This means the clouds_and_surface_water_mask passed to "
         f"marshsi.plume_vetting.compute() does not flag every non-finite / "
         f"fill-value pixel in the radiance — see the docstring of "
         f"marshsi.plume_vetting.compute for the required contract."
     )
+    return False
 
 
 def create_folders_for_results():
@@ -151,9 +157,11 @@ def get_neighboring_points(top_points, square_size, point_inside_plume, remove_c
     return all_neighboring_points
 
 
-def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_points_inside_plume, ind, ite, ii, combined_mask, background_mask, plume_mask, dist_opt, rng=None):
+def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_points_inside_plume, ind, ite, ii, combined_mask, background_mask, plume_mask, dist_opt, rng=None, logger=None):
     if rng is None:
         rng = np.random.RandomState()
+    if logger is None:
+        from loguru import logger as logger
 
     ###########################################################
     extreme_pts_flag=0 # 1: remove pixels with highest MF values
@@ -235,9 +243,17 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
     # Contract check: target/background rows must be finite and non-zero. If
     # this fails the caller's mask is inconsistent with the radiance — i.e. the
     # mask does not flag every non-finite/fill pixel. See the docstring of
-    # ``marshsi.plume_vetting.compute`` for the exact contract.
-    _check_radiance_rows_valid(A_data, "A_data (target)")
-    _check_radiance_rows_valid(B_data, "B_data (background)")
+    # ``marshsi.plume_vetting.compute`` for the exact contract. We return None
+    # so ``compute()`` skips the polygon and keeps processing the rest.
+    logger.debug(
+        f"[get_radiance_ratio] A_data shape={A_data.shape}, "
+        f"B_data shape={B_data.shape}, "
+        f"top_points={len(top_points)}, valid_bg_pixels={B_data.shape[0]}"
+    )
+    if not _check_radiance_rows_valid(A_data, "A_data (target)", logger=logger):
+        return None
+    if not _check_radiance_rows_valid(B_data, "B_data (background)", logger=logger):
+        return None
 
     # each row of similarity_matrix corresponds to a target pixel; each column corresponds to a background pixel
     if dist_opt==0:

@@ -25,34 +25,44 @@ from marshsi.plume_vetting_sfun import _check_radiance_rows_valid
 
 
 class TestCheckRadianceRowsValid:
-    def test_passes_on_clean_array(self):
-        arr = np.ones((5, 10))
-        # No exception raised.
-        assert _check_radiance_rows_valid(arr, "A_data") is None
+    """The helper returns a bool and logs an error; it no longer raises.
 
-    def test_raises_on_nan_row(self):
+    A False return tells ``get_radiance_ratio`` to bail out (return None) so
+    ``compute()`` can skip the offending polygon and continue with the rest —
+    we'd rather diagnose which polygon broke the contract than abort the tile.
+    """
+
+    def test_passes_on_clean_array(self, caplog):
+        arr = np.ones((5, 10))
+        mock_logger = MagicMock()
+        assert _check_radiance_rows_valid(arr, "A_data", logger=mock_logger) is True
+        mock_logger.error.assert_not_called()
+
+    def test_returns_false_on_nan_row(self):
         arr = np.ones((5, 10))
         arr[2, 3] = np.nan
-        with pytest.raises(ValueError) as exc_info:
-            _check_radiance_rows_valid(arr, "A_data (target)")
-        msg = str(exc_info.value)
+        mock_logger = MagicMock()
+        assert _check_radiance_rows_valid(arr, "A_data (target)", logger=mock_logger) is False
+        mock_logger.error.assert_called_once()
+        msg = mock_logger.error.call_args[0][0]
         assert "A_data (target)" in msg
         assert "1 non-finite row" in msg
         assert "0 all-zero row" in msg
         assert "clouds_and_surface_water_mask" in msg
 
-    def test_raises_on_inf_row(self):
+    def test_returns_false_on_inf_row(self):
         arr = np.ones((3, 4))
         arr[1, 0] = np.inf
-        with pytest.raises(ValueError, match="non-finite row"):
-            _check_radiance_rows_valid(arr, "B_data (background)")
+        mock_logger = MagicMock()
+        assert _check_radiance_rows_valid(arr, "B_data (background)", logger=mock_logger) is False
+        assert "non-finite row" in mock_logger.error.call_args[0][0]
 
-    def test_raises_on_all_zero_row(self):
+    def test_returns_false_on_all_zero_row(self):
         arr = np.ones((4, 6))
         arr[0, :] = 0.0
-        with pytest.raises(ValueError) as exc_info:
-            _check_radiance_rows_valid(arr, "B_data (background)")
-        msg = str(exc_info.value)
+        mock_logger = MagicMock()
+        assert _check_radiance_rows_valid(arr, "B_data (background)", logger=mock_logger) is False
+        msg = mock_logger.error.call_args[0][0]
         assert "1 all-zero row" in msg
         assert "0 non-finite row" in msg
 
@@ -61,18 +71,24 @@ class TestCheckRadianceRowsValid:
         arr[0, :] = 0.0
         arr[1, :] = 0.0
         arr[3, 2] = np.nan
-        with pytest.raises(ValueError) as exc_info:
-            _check_radiance_rows_valid(arr, "X")
-        msg = str(exc_info.value)
+        mock_logger = MagicMock()
+        assert _check_radiance_rows_valid(arr, "X", logger=mock_logger) is False
+        msg = mock_logger.error.call_args[0][0]
         assert "1 non-finite row" in msg
         assert "2 all-zero row" in msg
         assert "6 total" in msg
 
     def test_error_message_points_to_contract(self):
         arr = np.zeros((1, 3))
-        with pytest.raises(ValueError) as exc_info:
-            _check_radiance_rows_valid(arr, "A_data")
-        assert "marshsi.plume_vetting.compute" in str(exc_info.value)
+        mock_logger = MagicMock()
+        _check_radiance_rows_valid(arr, "A_data", logger=mock_logger)
+        assert "marshsi.plume_vetting.compute" in mock_logger.error.call_args[0][0]
+
+    def test_default_logger_used_when_none(self):
+        """Passing logger=None falls back to the module-level loguru logger
+        (no exception raised, just a default-logged error)."""
+        arr = np.zeros((1, 3))
+        assert _check_radiance_rows_valid(arr, "A_data") is False
 
 
 # ── compute() contract enforcement via a synthetic scene ───────────────
@@ -149,38 +165,46 @@ def _build_synthetic_scene(
 
 
 class TestComputeContractEnforcement:
-    def test_unmask_fill_pixel_inside_polygon_triggers_value_error(self):
+    def test_unmask_fill_pixel_inside_polygon_skips_polygon_and_logs(self):
         scene = _build_synthetic_scene()
         # Plant a zero-radiance pixel (simulating un-substituted fill) inside the
-        # polygon WITHOUT flagging it in the mask. The contract check inside
-        # get_radiance_ratio must raise ValueError before linear_sum_assignment.
+        # polygon WITHOUT flagging it in the mask. compute() should log an
+        # error from _check_radiance_rows_valid and return an empty dict
+        # (this polygon was the only one, and it gets skipped).
         scene["radiance"][16, 16, :] = 0.0  # inside plume polygon
 
-        with pytest.raises(ValueError) as exc_info:
-            pv.compute(
-                radius=8,
-                num_pts=4,
-                min_polygon_size=0,
-                random_seed=0,
-                **scene,
-            )
-        msg = str(exc_info.value)
-        # Must mention which side failed and reference the contract
-        assert "A_data" in msg or "B_data" in msg
-        assert "all-zero row" in msg or "non-finite row" in msg
+        mock_logger = MagicMock()
+        result = pv.compute(
+            radius=8,
+            num_pts=4,
+            min_polygon_size=0,
+            random_seed=0,
+            logger=mock_logger,
+            **scene,
+        )
+        assert result == {}
+        # The validator should have logged the contract violation
+        assert mock_logger.error.call_count >= 1
+        error_msgs = " ".join(c[0][0] for c in mock_logger.error.call_args_list)
+        assert "A_data" in error_msgs or "B_data" in error_msgs
+        assert "all-zero row" in error_msgs or "non-finite row" in error_msgs
 
-    def test_unmask_nan_pixel_inside_polygon_triggers_value_error(self):
+    def test_unmask_nan_pixel_inside_polygon_skips_polygon_and_logs(self):
         scene = _build_synthetic_scene()
         scene["radiance"][16, 16, 5] = np.nan  # one NaN entry inside plume polygon
 
-        with pytest.raises(ValueError, match="non-finite row"):
-            pv.compute(
-                radius=8,
-                num_pts=4,
-                min_polygon_size=0,
-                random_seed=0,
-                **scene,
-            )
+        mock_logger = MagicMock()
+        result = pv.compute(
+            radius=8,
+            num_pts=4,
+            min_polygon_size=0,
+            random_seed=0,
+            logger=mock_logger,
+            **scene,
+        )
+        assert result == {}
+        error_msgs = " ".join(c[0][0] for c in mock_logger.error.call_args_list)
+        assert "non-finite row" in error_msgs
 
     def test_masking_the_bad_pixel_lets_compute_run(self, recwarn):
         """When the caller correctly flags the bad pixel, the polygon is skipped
