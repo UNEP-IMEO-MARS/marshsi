@@ -15,7 +15,7 @@ include = ["marshsi/output_Tch4_LUT_AMF_VZA_0_v2.nc",
            "marshsi/emit/ch4.lut"]
 
 [tool.poetry.dependencies]
-python = ">=3.11,<4.0"
+python = ">=3.12,<4.0"
 rasterio = ">=1"
 numpy = ">=1"
 georeader-spaceml = ">=1.5.12"
