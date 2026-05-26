@@ -184,8 +184,7 @@ def compute(
     """
     rng = np.random.RandomState(random_seed)
     if logger is None:
-        from loguru import logger as logger
-
+        logger = logging.getLogger(__name__)
     # Scene-level diagnostics — useful for cross-checking that the caller has
     # passed the same data the script-level debug observed.
     logger.debug(
