@@ -39,6 +39,12 @@ pre-commit = "^3.4.0"
 tox = "^4.11.1"
 ipykernel = "^6.30.0"
 fsspec = ">=2024"
+# Mirror the [mag1c] extras so ``make test-notebooks`` (which runs
+# emit_example.ipynb covering mag1c) works in the dev env. Also unblocks
+# the loguru-dependent fallback paths exercised by tests.
+torch = ">=2"
+spectral = "^0.24"
+loguru = "^0.7"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"
