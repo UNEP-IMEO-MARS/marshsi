@@ -42,6 +42,7 @@ def _check_radiance_rows_valid(arr: np.ndarray, name: str, logger=None) -> bool:
     if logger is None:
         import logging
         logger = logging.getLogger(__name__)
+    logger.error(
         f"{name} has {non_finite_rows} non-finite row(s) and {zero_rows} "
         f"all-zero row(s) out of {arr.shape[0]} total. Skipping this polygon. "
         f"This means the clouds_and_surface_water_mask passed to "
