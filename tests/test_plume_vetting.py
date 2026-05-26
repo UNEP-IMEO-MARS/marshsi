@@ -239,8 +239,8 @@ class TestComputeContractEnforcement:
 def _mock_emit_image(rdn_raw: np.ndarray, wavelengths: np.ndarray, transform: Affine,
                      crs: str, l2a_mask: np.ndarray | None = None) -> MagicMock:
     """Build a MagicMock with the surface area of an EMITImage that compute_emit uses."""
-    # compute_emit calls emit_image.load(as_reflectance=False), then transposes
-    # data.values from (B, H, W) → (H, W, B).
+    # compute_emit calls emit_image.load_raw(), then georeference(), and later
+    # transposes data.values from (B, H, W) -> (H, W, B).
     data_values_bhw = np.transpose(rdn_raw, (2, 0, 1))
     data_geotensor = GeoTensor(
         data_values_bhw,
@@ -250,19 +250,24 @@ def _mock_emit_image(rdn_raw: np.ndarray, wavelengths: np.ndarray, transform: Af
     )
 
     emit_image = MagicMock()
+    emit_image.load_raw.return_value = data_values_bhw
     emit_image.load.return_value = data_geotensor
     emit_image.wavelengths = wavelengths
+    emit_image.filename = __file__
+
+    # emit_image.georreference(arr, fill_value_default=...) -> GeoTensor
+    def _georef(arr, fill_value_default=True):
+        return GeoTensor(arr, transform=transform, crs=crs,
+                         fill_value_default=fill_value_default)
+
+    emit_image.georreference.side_effect = _georef
+
     if l2a_mask is not None:
         # nc_ds_l2amask["mask"] is indexed mask_raw[..., :3] — give it 3 bands
         # of the same boolean mask for simplicity.
         emit_image.nc_ds_l2amask = {
             "mask": np.stack([l2a_mask.astype(np.uint8)] * 3, axis=-1)
         }
-        # emit_image.georreference(arr, fill_value_default=True) → GeoTensor
-        def _georef(arr, fill_value_default=True):
-            return GeoTensor(arr, transform=transform, crs=crs,
-                             fill_value_default=fill_value_default)
-        emit_image.georreference.side_effect = _georef
     return emit_image
 
 
@@ -369,8 +374,9 @@ class TestComputeEmitMaskAugmentation:
         mask = captured["clouds_and_surface_water_mask"]
         # Mask should be all-False because no fill / NaN was injected and L2A is off.
         assert not mask.any()
-        # nc_ds_l2amask should not have been accessed
-        emit_image.georreference.assert_not_called()
+        # georreference is still used for radiance orthorectification, but not
+        # for the L2A cloud mask when use_l2a_mask=False.
+        assert emit_image.georreference.call_count == 1
 
     def test_use_l2a_mask_true_includes_cloud_mask(self, monkeypatch):
         captured = self._patch_compute(monkeypatch)
@@ -395,3 +401,5 @@ class TestComputeEmitMaskAugmentation:
         assert mask[7, 9]
         # Other pixels remain unmasked (radiance / cmf are clean)
         assert not mask[0, 0]
+        # Extra georreference call occurs for the L2A cloud mask when enabled.
+        assert emit_image.georreference.call_count == 2
