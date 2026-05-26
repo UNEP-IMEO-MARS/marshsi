@@ -188,17 +188,17 @@ def compute(
 
     # Scene-level diagnostics — useful for cross-checking that the caller has
     # passed the same data the script-level debug observed.
-    logger.debug(
-        f"[compute] scene: radiance shape={radiance.shape}, "
-        f"cmf shape={cmf.values.shape}, cmf.crs={cmf.crs}, "
-        f"cmf.fill_value_default={cmf.fill_value_default}, "
-        f"n_polygons={len(polygons)}, n_mask_True={int(clouds_and_surface_water_mask.sum())}"
-    )
-    logger.debug(
-        f"[compute] radiance: min={float(radiance.min())}, max={float(radiance.max())}, "
-        f"n_all_zero_pixels={int(np.all(radiance == 0, axis=-1).sum())}, "
-        f"n_any_nan_pixels={int(np.any(~np.isfinite(radiance), axis=-1).sum())}"
-    )
+    # logger.debug(
+    #     f"[compute] scene: radiance shape={radiance.shape}, "
+    #     f"cmf shape={cmf.values.shape}, cmf.crs={cmf.crs}, "
+    #     f"cmf.fill_value_default={cmf.fill_value_default}, "
+    #     f"n_polygons={len(polygons)}, n_mask_True={int(clouds_and_surface_water_mask.sum())}"
+    # )
+    # logger.debug(
+    #     f"[compute] radiance: min={float(radiance.min())}, max={float(radiance.max())}, "
+    #     f"n_all_zero_pixels={int(np.all(radiance == 0, axis=-1).sum())}, "
+    #     f"n_any_nan_pixels={int(np.any(~np.isfinite(radiance), axis=-1).sum())}"
+    # )
 
     # Prepare CMF: replace fill values with 0 so they don't affect masks/stats
     cmf = cmf.copy()
@@ -255,14 +255,14 @@ def compute(
         rdn_in_poly = radiance[plume_mask_bool]
         cmf_in_poly = mf_values[plume_mask_bool]
         n_all_zero_in_poly = int(np.all(rdn_in_poly == 0, axis=-1).sum())
-        logger.debug(
-            f"[compute pol_idx={pol_idx}] in_plume_pixels={int(number_of_pixels)}, "
-            f"rdn mean={float(rdn_in_poly.mean()):.4f} (across all bands), "
-            f"cmf mean={float(cmf_in_poly.mean()):.4f}, "
-            f"cmf max={float(cmf_in_poly.max()):.4f}, "
-            f"n_all_zero_rdn_in_poly={n_all_zero_in_poly}, "
-            f"polygon_bounds={polygon.bounds}"
-        )
+        # logger.debug(
+        #     f"[compute pol_idx={pol_idx}] in_plume_pixels={int(number_of_pixels)}, "
+        #     f"rdn mean={float(rdn_in_poly.mean()):.4f} (across all bands), "
+        #     f"cmf mean={float(cmf_in_poly.mean()):.4f}, "
+        #     f"cmf max={float(cmf_in_poly.max()):.4f}, "
+        #     f"n_all_zero_rdn_in_poly={n_all_zero_in_poly}, "
+        #     f"polygon_bounds={polygon.bounds}"
+        # )
 
         combined_mask, background_mask = compute_masks(
             mf_values, mf_threshold,
@@ -459,51 +459,51 @@ def compute_emit(
     # Diagnostic format matches marshsi.emit.retrieval_upv_emit.AT_MF_total_EMIT
     # and marshsi.emit.mag1c_emit so the three call sites can be correlated.
     import os as _os
-    _p = emit_image.filename
-    logger.debug(
-        f"[compute_emit.load_raw] file={_p} "
-        f"size={_os.path.getsize(_p)} mtime={_os.path.getmtime(_p):.1f} "
-        f"shape={rdn_sensor_arr.shape}, dtype={rdn_sensor_arr.dtype}, "
-        f"min={float(rdn_sensor_arr.min())}, max={float(rdn_sensor_arr.max())}, "
-        f"n_neg9999={int(np.sum(rdn_sensor_arr == EMIT_RADIANCE_FILL_VALUE))}, "
-        f"n_nan={int(np.sum(~np.isfinite(rdn_sensor_arr)))}, "
-        f"n_all_zero_pixels={int(np.sum(np.all(rdn_sensor_arr == 0, axis=0)))}, "
-        f"n_pixels_total={int(rdn_sensor_arr.shape[1] * rdn_sensor_arr.shape[2])}"
-    )
+    # _p = emit_image.filename
+    # logger.debug(
+    #     f"[compute_emit.load_raw] file={_p} "
+    #     f"size={_os.path.getsize(_p)} mtime={_os.path.getmtime(_p):.1f} "
+    #     f"shape={rdn_sensor_arr.shape}, dtype={rdn_sensor_arr.dtype}, "
+    #     f"min={float(rdn_sensor_arr.min())}, max={float(rdn_sensor_arr.max())}, "
+    #     f"n_neg9999={int(np.sum(rdn_sensor_arr == EMIT_RADIANCE_FILL_VALUE))}, "
+    #     f"n_nan={int(np.sum(~np.isfinite(rdn_sensor_arr)))}, "
+    #     f"n_all_zero_pixels={int(np.sum(np.all(rdn_sensor_arr == 0, axis=0)))}, "
+    #     f"n_pixels_total={int(rdn_sensor_arr.shape[1] * rdn_sensor_arr.shape[2])}"
+    # )
 
     data = emit_image.georreference(
         rdn_sensor_arr, fill_value_default=EMIT_RADIANCE_FILL_VALUE
     )
     rdn_raw = np.transpose(data.values, (1, 2, 0))   # (B, H, W) → (H, W, B)
 
-    logger.debug(
-        f"[compute_emit] emit_image.crs={getattr(emit_image, 'crs', None)}, "
-        f"data.crs={data.crs}, data.transform={data.transform}, "
-        f"rdn_raw shape={rdn_raw.shape}, dtype={rdn_raw.dtype}, "
-        f"rdn_raw min={float(rdn_raw.min())}, max={float(rdn_raw.max())}, "
-        f"n_neg9999={int(np.sum(rdn_raw == EMIT_RADIANCE_FILL_VALUE))}, "
-        f"n_nan={int(np.sum(~np.isfinite(rdn_raw)))}, "
-        f"n_all_zero_pixels={int(np.sum(np.all(rdn_raw == 0, axis=-1)))}, "
-        f"data.fill_value_default={data.fill_value_default}"
-    )
-    logger.debug(
-        f"[compute_emit] cmf.crs={cmf.crs}, cmf.transform={cmf.transform}, "
-        f"cmf shape={cmf.values.shape}, cmf.fill_value_default={cmf.fill_value_default}, "
-        f"cmf min={float(cmf.values.min())}, cmf max={float(cmf.values.max())}, "
-        f"n_cmf_fill={int(np.sum(cmf.values == cmf.fill_value_default))}, "
-        f"same_extent={cmf.same_extent(data)}"
-    )
+    # logger.debug(
+    #     f"[compute_emit] emit_image.crs={getattr(emit_image, 'crs', None)}, "
+    #     f"data.crs={data.crs}, data.transform={data.transform}, "
+    #     f"rdn_raw shape={rdn_raw.shape}, dtype={rdn_raw.dtype}, "
+    #     f"rdn_raw min={float(rdn_raw.min())}, max={float(rdn_raw.max())}, "
+    #     f"n_neg9999={int(np.sum(rdn_raw == EMIT_RADIANCE_FILL_VALUE))}, "
+    #     f"n_nan={int(np.sum(~np.isfinite(rdn_raw)))}, "
+    #     f"n_all_zero_pixels={int(np.sum(np.all(rdn_raw == 0, axis=-1)))}, "
+    #     f"data.fill_value_default={data.fill_value_default}"
+    # )
+    # logger.debug(
+    #     f"[compute_emit] cmf.crs={cmf.crs}, cmf.transform={cmf.transform}, "
+    #     f"cmf shape={cmf.values.shape}, cmf.fill_value_default={cmf.fill_value_default}, "
+    #     f"cmf min={float(cmf.values.min())}, cmf max={float(cmf.values.max())}, "
+    #     f"n_cmf_fill={int(np.sum(cmf.values == cmf.fill_value_default))}, "
+    #     f"same_extent={cmf.same_extent(data)}"
+    # )
 
     # Reproject CMF to the radiance grid if extents differ
     if not cmf.same_extent(data):
         logger.debug("[compute_emit] cmf differs in extent → reprojecting via read_reproject_like")
         cmf = read.read_reproject_like(cmf, data)
-        logger.debug(
-            f"[compute_emit] cmf after reproject: shape={cmf.values.shape}, "
-            f"fill_value_default={cmf.fill_value_default}, "
-            f"min={float(cmf.values.min())}, max={float(cmf.values.max())}, "
-            f"n_fill={int(np.sum(cmf.values == cmf.fill_value_default))}"
-        )
+        # logger.debug(
+        #     f"[compute_emit] cmf after reproject: shape={cmf.values.shape}, "
+        #     f"fill_value_default={cmf.fill_value_default}, "
+        #     f"min={float(cmf.values.min())}, max={float(cmf.values.max())}, "
+        #     f"n_fill={int(np.sum(cmf.values == cmf.fill_value_default))}"
+        # )
 
     # Build the mask required by compute()'s contract: pixels with non-finite
     # or fill-value radiance, plus pixels with non-finite or fill-value CMF.
@@ -521,11 +521,11 @@ def compute_emit(
         l2a_mask_geo = emit_image.georreference(l2a_mask, fill_value_default=True)
         mask = mask | l2a_mask_geo.values
 
-    logger.debug(
-        f"[compute_emit] mask built: rdn_invalid={int(rdn_invalid.sum())}, "
-        f"cmf_invalid={int(cmf_invalid.sum())}, total mask True={int(mask.sum())} "
-        f"of {mask.size} pixels ({100.0 * mask.sum() / mask.size:.2f}%)"
-    )
+    # logger.debug(
+    #     f"[compute_emit] mask built: rdn_invalid={int(rdn_invalid.sum())}, "
+    #     f"cmf_invalid={int(cmf_invalid.sum())}, total mask True={int(mask.sum())} "
+    #     f"of {mask.size} pixels ({100.0 * mask.sum() / mask.size:.2f}%)"
+    # )
 
     rdn = np.where(rdn_raw == EMIT_RADIANCE_FILL_VALUE, 0, rdn_raw)
 
