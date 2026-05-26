@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.4...v0.1.5) (2026-05-26)
+
+
+### Bug Fixes
+
+* **plume_vetting:** make mask contract explicit and defend against de… ([6df01cf](https://github.com/UNEP-IMEO-MARS/marshsi/commit/6df01cff561b3bd87aa785f39d3d5f9fe609ae78))
+* **plume_vetting:** make mask contract explicit and defend against degenerate radiance rows ([08a1ddd](https://github.com/UNEP-IMEO-MARS/marshsi/commit/08a1ddd9cb4e4ff17169663261c2718d962e44a2))
+
 ## [0.1.4](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.3...v0.1.4) (2026-05-06)
 
 
