@@ -3,8 +3,8 @@
 These tests cover the two pieces of behaviour added to defend against silently
 producing all-NaN ``similarity_matrix`` inputs to ``scipy.optimize.linear_sum_assignment``:
 
-1. ``plume_vetting_sfun._check_radiance_rows_valid`` raises a descriptive
-   ``ValueError`` when the caller's ``clouds_and_surface_water_mask`` lets a
+1. ``plume_vetting_sfun._check_radiance_rows_valid`` logs a descriptive error and
+   returns ``False`` when the caller's ``clouds_and_surface_water_mask`` lets a
    non-finite or all-zero radiance row through.
 2. The per-sensor wrappers (``compute_emit`` / ``compute_prisma`` / ``compute_enmap``)
    build the mask required by ``compute``'s contract — non-finite and fill-value
