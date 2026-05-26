@@ -40,8 +40,8 @@ def _check_radiance_rows_valid(arr: np.ndarray, name: str, logger=None) -> bool:
     if non_finite_rows == 0 and zero_rows == 0:
         return True
     if logger is None:
-        from loguru import logger as logger
-    logger.error(
+        import logging
+        logger = logging.getLogger(__name__)
         f"{name} has {non_finite_rows} non-finite row(s) and {zero_rows} "
         f"all-zero row(s) out of {arr.shape[0]} total. Skipping this polygon. "
         f"This means the clouds_and_surface_water_mask passed to "
@@ -161,8 +161,8 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
     if rng is None:
         rng = np.random.RandomState()
     if logger is None:
-        from loguru import logger as logger
-
+        import logging
+        logger = logging.getLogger(__name__)
     ###########################################################
     extreme_pts_flag=0 # 1: remove pixels with highest MF values
     dilate_flag=1 # 1: dilate around seed pixels

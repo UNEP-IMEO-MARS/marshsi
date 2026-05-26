@@ -184,8 +184,7 @@ def compute(
     """
     rng = np.random.RandomState(random_seed)
     if logger is None:
-        from loguru import logger as logger
-
+        logger = logging.getLogger(__name__)
     # Scene-level diagnostics — useful for cross-checking that the caller has
     # passed the same data the script-level debug observed.
     # logger.debug(
@@ -438,8 +437,7 @@ def compute_emit(
     """
 
     if logger is None:
-        from loguru import logger as logger
-
+        logger = logging.getLogger(__name__)
     # Build target signature from LUT if not supplied
     if target_signature is None:
         target_signature = load_target_spectrum_mf(emit_image) * SCALE_TARGET_PPB_TO_PPMxM
