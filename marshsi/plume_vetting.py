@@ -446,9 +446,6 @@ def compute_emit(
 
     # Load radiance and reshape to (H, W, B). Keep the raw array around so we
     # can build the invalidity mask from it before replacing fills with 0.
-    # TODO: it may be worth loading only the wavelengths used by the vetting
-    # code (those outside the methane absorption window plus the fit window) —
-    # this would also let the invalidity check be band-subset-specific.
     #
     # NOTE: we deliberately bypass emit_image.load() (which wraps
     # load_raw + georreference) and call the two stages explicitly so we can
@@ -594,8 +591,6 @@ def compute_prisma(
     """
 
     # PRISMA raw SWIR is loaded in (column, row, band); transpose to (row, col, band).
-    # TODO: it may be worth loading only the wavelengths used by the vetting
-    # code (those outside the methane absorption window plus the fit window).
     rdn_raw = np.transpose(np.asarray(pi.load_raw(swir_flag=True)), (1, 0, 2))
     rdn_geo = griddata.read_to_crs(
         rdn_raw.astype(np.float64),
@@ -696,8 +691,6 @@ def compute_enmap(
     data_swir = enmapi.load_product("SPECTRAL_IMAGE_SWIR")
     fill_val = data_swir.fill_value_default
     # apply RPC EnMAP (needed to have colocated data with the plume).
-    # TODO: it may be worth loading only the wavelengths used by the vetting
-    # code (those outside the methane absorption window plus the fit window).
     data_swir = read.read_rpcs(
             data_swir.values.astype(np.float32),
             rpcs=enmapi.rpcs_swir,
