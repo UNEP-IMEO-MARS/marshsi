@@ -161,8 +161,8 @@ def get_radiance_ratio(wl, radius, num_pts, rdn, mf, orig_plume_coord, orig_poin
     if rng is None:
         rng = np.random.RandomState()
     if logger is None:
-        from loguru import logger as logger
-
+        import logging
+        logger = logging.getLogger(__name__)
     ###########################################################
     extreme_pts_flag=0 # 1: remove pixels with highest MF values
     dilate_flag=1 # 1: dilate around seed pixels
