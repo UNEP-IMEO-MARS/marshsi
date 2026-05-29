@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "marshsi"
-version = "0.1.4"
+version = "0.1.5"
 description = "🛰️ Matched filters for hyperspectral methane retrieval"
 authors = ["Gonzalo Mateo-García"]
 repository = "https://github.com/UNEP-IMEO-MARS/marshsi"
