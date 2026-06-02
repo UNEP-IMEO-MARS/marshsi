@@ -47,6 +47,8 @@ spectral = "^0.24"
 loguru = "^0.7"
 # Loads the repo-root .env (credentials/config) in docs/conftest.py for the notebook tests.
 python-dotenv = "^1.0.0"
+# Azure Blob Storage filesystem used by prisma_example and enmap_example notebooks.
+adlfs = ">=2024"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"
