@@ -13,6 +13,10 @@ secrets exported into the job environment):
   (plus ``AZURE_STORAGE_ACCOUNT`` and ``CONTAINER_NAME`` for the actual
   download).
 * EMIT (NASA Earthdata): ``EARTHDATA_TOKEN``.
+
+These can be set directly as environment variables, or placed in a repo-root
+``.env`` file (git-ignored) which this conftest loads automatically via
+python-dotenv before the notebooks run. See ``.env.sample`` for the template.
 """
 
 import os
@@ -20,8 +24,20 @@ from pathlib import Path
 
 import pytest
 
-# Resolve tests/data/ relative to this file (docs/conftest.py -> project root -> tests/data/)
-_DATA_DIR = Path(__file__).resolve().parent.parent / "tests" / "data"
+# Resolve paths relative to this file (docs/conftest.py -> project root).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DATA_DIR = _PROJECT_ROOT / "tests" / "data"
+
+# Load credentials/config from a repo-root .env file if present (and
+# python-dotenv is installed) so they are available both for the gating below
+# and for the notebook kernels (which inherit this process's environment).
+# See .env.sample.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_PROJECT_ROOT / ".env")
+except ImportError:
+    pass
 
 _ENMAP_TILE = "ENMAP01-____L1B-DT0000149931_20250820T075156Z_002_V010502_20250827T172144Z"
 

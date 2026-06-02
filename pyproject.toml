@@ -45,6 +45,8 @@ fsspec = ">=2024"
 torch = ">=2"
 spectral = "^0.24"
 loguru = "^0.7"
+# Loads the repo-root .env (credentials/config) in docs/conftest.py for the notebook tests.
+python-dotenv = "^1.0.0"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"

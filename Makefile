@@ -9,8 +9,13 @@ test: ## Run tests
 	@poetry run pytest -v
 
 .PHONY: test-notebooks
-test-notebooks: ## Run notebook integration tests (requires data files in tests/data/)
+test-notebooks: ## Run notebook integration tests (requires data files in tests/data/ or credentials in .env)
 	@poetry run pytest --nbmake docs/*_example.ipynb -v --nbmake-timeout=600
+
+.PHONY: regenerate-notebooks
+regenerate-notebooks: ## Re-execute docs/ notebooks and write their outputs back (same run/skip logic as test-notebooks)
+	@echo "📝 Regenerating notebook outputs"
+	@poetry run pytest --nbmake --overwrite docs/*_example.ipynb -v --nbmake-timeout=600
 
 .PHONY: lint
 lint: ## Run linters
