@@ -46,6 +46,7 @@ import os
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
+
 try:
     import spectral
 except ImportError:
@@ -112,13 +113,14 @@ def generate_template_from_bands(
     numer = np.exp(-((wave[:, None] - centers[None, :]) ** 2) / (2 * var))  # (31800, K)
     response = numer / denom  # (31800, K)
     # Normalize each gaussian response to sum to 1.
+    col_sums = response.sum(axis=0)
     response = np.divide(
-        response, response.sum(axis=0), where=response.sum(axis=0) > 0
+        response, col_sums, out=np.zeros_like(response), where=col_sums > 0
     )  # (31800, K)
     # implement resampling as matrix multiply
     resampled = rads.dot(response)  # (7, K)
 
-    lograd = np.log(resampled, where=resampled > 0)  # (7, K)
+    lograd = np.log(resampled, out=np.zeros_like(resampled), where=resampled > 0)  # (7, K)
 
     # lograd is the log of the transmittance for the 7 different concentrations
 

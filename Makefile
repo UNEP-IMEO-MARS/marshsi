@@ -4,8 +4,13 @@ install: ## Install the poetry environment and install the pre-commit hooks
 	@poetry install
 	@poetry shell
 
+.PHONY: lfs-fetch
+lfs-fetch: ## Fetch the LFS-tracked EMIT test fixtures if not already present
+	@git lfs pull --include="tests/data/emit_plume_fixture/**" \
+		|| echo "⚠️  git lfs not available; EMIT fixture tests will be skipped"
+
 .PHONY: test
-test: ## Run tests
+test: lfs-fetch ## Run tests
 	@poetry run pytest -v
 
 .PHONY: test-notebooks

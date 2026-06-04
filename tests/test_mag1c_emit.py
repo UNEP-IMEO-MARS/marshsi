@@ -1,35 +1,26 @@
 """
 Tests for marshsi.emit.mag1c_emit.
 
-These run against the real 200x200 EMIT RAD scene fetched from the georeader
-repo (see the ``emit_image`` fixture in conftest.py). The focus is the NaN/inf
-handling added to ``mag1c_emit``: a single non-finite radiance pixel propagates
-through the covariance and makes ``torch.linalg.cholesky`` raise
-``_LinAlgError: not positive-definite``. ``mag1c_emit`` must instead drop those
-pixels (treating them like the fill value) and still produce finite results for
-the valid ones.
+These run against the committed plume EMIT fixture (see the ``emit_image`` fixture
+in conftest.py — fetched via Git LFS). They cover:
+
+- NaN/inf handling: a single non-finite radiance pixel propagates through the
+  covariance and makes ``torch.linalg.cholesky`` raise ``_LinAlgError``;
+  ``mag1c_emit`` must instead drop those pixels (like the fill value) and still
+  produce finite results for the valid ones.
+- The georeferenced output path (returns GeoTensors on the EMIT grid).
 """
 
 import numpy as np
 import pytest
+from georeader.geotensor import GeoTensor
 
 from marshsi.emit import mag1c
 from marshsi.emit.mag1c_emit import mag1c_emit
 
 from ._emit_corruption import inject_into_load_raw
 
-# ``generate_template_from_bands`` emits a benign numpy UserWarning
-# ("'where' used without 'out'") on the real fixture's band parameters; the
-# suite promotes warnings to errors, so scope-ignore that one here. It is
-# unrelated to the NaN handling under test and harmless in production (the
-# gaussian response sums are always > 0, so no uninitialized memory is read).
-_IGNORE_WHERE_WARNING = pytest.mark.filterwarnings(
-    r"ignore:'where' used without 'out':UserWarning"
-)
 
-
-@pytest.mark.network
-@_IGNORE_WHERE_WARNING
 class TestMag1cEmitBaseline:
     """The happy path must work on the real scene before we test corruption."""
 
@@ -46,9 +37,16 @@ class TestMag1cEmitBaseline:
         assert valid.size > 0
         assert np.all(np.isfinite(valid))
 
+    def test_georeferenced_true_returns_geotensors(self, emit_image):
+        mag, albedo = mag1c_emit(emit_image, georeferenced=True, display_pbar=False)
 
-@pytest.mark.network
-@_IGNORE_WHERE_WARNING
+        assert isinstance(mag, GeoTensor) and isinstance(albedo, GeoTensor)
+        assert mag.shape == emit_image.shape[1:]  # (H, W) ortho grid
+        valid = mag.values[mag.values != mag.fill_value_default]
+        assert valid.size > 0
+        assert np.all(np.isfinite(valid))
+
+
 class TestMag1cEmitNaNHandling:
     """The regression: non-finite radiance must not crash the Cholesky solve."""
 
