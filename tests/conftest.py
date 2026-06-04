@@ -49,7 +49,7 @@ def _require_emit_fixture() -> None:
         )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def emit_image():
     """A georeader EMITImage backed by the committed plume fixture."""
     _require_emit_fixture()
@@ -58,7 +58,7 @@ def emit_image():
     return emit.EMITImage(str(_FIXTURE_RAD))
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def emit_plume_polygon():
     """The largest plume polygon (WGS84) for the fixture scene — the window is
     centered on it. Used by compute_emit and to overlay/locate the plume."""
@@ -73,7 +73,7 @@ def emit_plume_polygon():
     return plumes.geometry.iloc[int(areas.idxmax())]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def emit_utm_products(emit_image):
     """Recompute the 7 matched-filter products in UTM exactly as
     notebooks/emit_fixture.ipynb does: retrieve in the raw sensor frame
@@ -103,7 +103,7 @@ def emit_utm_products(emit_image):
     }
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def emit_products_dir():
     """Directory holding the committed reference product COGs."""
     _require_emit_fixture()
