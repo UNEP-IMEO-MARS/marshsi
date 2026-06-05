@@ -1118,14 +1118,14 @@ dev = ["codecov", "pre-commit", "pytest (>=3.1.0)", "pytest-cov", "pytest-xdist"
 
 [[package]]
 name = "georeader-spaceml"
-version = "1.5.12"
+version = "2.3.1"
 description = "🛰️ Process raster data in python"
 optional = false
 python-versions = "<4.0,>=3.11"
 groups = ["main"]
 files = [
-    {file = "georeader_spaceml-1.5.12-py3-none-any.whl", hash = "sha256:d784ee5176006872b66067f1815bb77bfb260aec56e18e9a5ed70398aeea424b"},
-    {file = "georeader_spaceml-1.5.12.tar.gz", hash = "sha256:05e0d68f168c808e4acc8430a8e62dd82268f7249f7e8dda1613fb4006529e1d"},
+    {file = "georeader_spaceml-2.3.1-py3-none-any.whl", hash = "sha256:f6af8c222819d334ab50f98a374b38349f38f4bdea1f75e6bbbfed51d67f96bd"},
+    {file = "georeader_spaceml-2.3.1.tar.gz", hash = "sha256:44916f3af2276a5327dad0ae942d15606810796b33f8451f9b4a5a23ccab5496"},
 ]
 
 [package.dependencies]
@@ -1134,6 +1134,9 @@ mercantile = ">=1"
 numpy = ">=1"
 rasterio = ">=1"
 shapely = ">=2"
+
+[package.extras]
+carbonmapper = ["pydantic (>=2)", "requests (>=2)"]
 
 [[package]]
 name = "ghp-import"
@@ -5527,4 +5530,4 @@ mag1c = ["spectral", "torch"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "3c10e1cf6f69ba3b1cc68b1c82c60954586b865ffc3504ae6858cb579c04469a"
+content-hash = "c97f08e21b94e66af9d269d6e869e3157e450ac4f17417dd6112d14e7d0991f9"
