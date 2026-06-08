@@ -14,8 +14,16 @@ test: lfs-fetch ## Run tests
 	@poetry run pytest -v
 
 .PHONY: test-notebooks
-test-notebooks: ## Run notebook integration tests (requires data files in tests/data/)
-	@poetry run pytest --nbmake docs/*_example.ipynb -v --nbmake-timeout=600
+test-notebooks: ## Run notebook integration tests (requires data files in tests/data/ or credentials in .env)
+	@echo "🧪 Running notebook integration tests"
+	@poetry run python -m ipykernel install --user --name marshsi --display-name "Python (marshsi)"
+	@poetry run pytest --nbmake docs/*_example.ipynb -v --nbmake-timeout=600 --nbmake-kernel=marshsi
+
+.PHONY: regenerate-notebooks
+regenerate-notebooks: ## Re-execute docs/ notebooks and write their outputs back (same run/skip logic as test-notebooks)
+	@echo "📝 Regenerating notebook outputs"
+	@poetry run python -m ipykernel install --user --name marshsi --display-name "Python (marshsi)"
+	@poetry run pytest --nbmake --overwrite docs/*_example.ipynb -v --nbmake-timeout=1500 --nbmake-kernel=marshsi
 
 .PHONY: lint
 lint: ## Run linters
