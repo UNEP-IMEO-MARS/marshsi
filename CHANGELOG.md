@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.5...v0.1.6) (2026-06-08)
+
+
+### Bug Fixes
+
+* **emit:** exclude non-finite radiance pixels from mag1c covariance ([91b0e66](https://github.com/UNEP-IMEO-MARS/marshsi/commit/91b0e667608118885a68ba1642e34df1b3790c90))
+* mag1c NaN and tests ([69c0919](https://github.com/UNEP-IMEO-MARS/marshsi/commit/69c0919650852524417046603da8f5a6f04dccf1))
+
 ## [0.1.5](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.4...v0.1.5) (2026-05-26)
 
 
