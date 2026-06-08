@@ -6480,4 +6480,4 @@ mag1c = ["spectral", "torch"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "3c10e1cf6f69ba3b1cc68b1c82c60954586b865ffc3504ae6858cb579c04469a"
+content-hash = "468d34fcea91b3674622e534f52c699673ebef1ce0438d378f59077c2f2af72c"
