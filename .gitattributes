@@ -1,0 +1,7 @@
+# Git LFS — large EMIT test fixture (built by notebooks/emit_fixture.ipynb).
+# The 350x350 plume scene (RAD ~129 MB + OBS/MASK) and the reference product COGs
+# are tracked with LFS so the repo stays light. Fetch with `git lfs pull` (the
+# Makefile `test` target and CI do this automatically).
+tests/data/emit_plume_fixture/**/*.nc filter=lfs diff=lfs merge=lfs -text
+tests/data/emit_plume_fixture/products/*.tif filter=lfs diff=lfs merge=lfs -text
+tests/data/emit_plume_fixture/EMIT_L1B_RAD_001_20220827T060753_9999999_001.nc filter=lfs diff=lfs merge=lfs -text

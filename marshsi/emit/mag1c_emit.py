@@ -82,7 +82,14 @@ def mag1c_emit(
             f"min={float(raw_data.min())} max={float(raw_data.max())} "
             f"n_neg9999={int(np.sum(raw_data == ei.fill_value_default))}"
         )
-    invalid = np.any(raw_data == ei.fill_value_default, axis=-1)  # (rows, cols)
+    # Exclude pixels that are either the fill value or non-finite (NaN/inf) in
+    # any band. A single non-finite pixel propagates through the covariance
+    # (C = (x-µ)ᵀ(x-µ) sums over pixels) and makes torch.linalg.cholesky raise
+    # `_LinAlgError: not positive-definite`. The classic == fill_value check does
+    # not catch genuine NaN/inf radiance, so we add an explicit finiteness check.
+    invalid = np.any(raw_data == ei.fill_value_default, axis=-1) | np.any(
+        ~np.isfinite(raw_data), axis=-1
+    )  # (rows, cols)
 
     mag1c_output = np.full(
         invalid.shape, dtype=np.float64, fill_value=ei.fill_value_default

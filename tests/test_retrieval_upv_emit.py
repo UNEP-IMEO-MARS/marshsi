@@ -8,11 +8,13 @@ Tests cover:
 - Module constants (wavelength ranges)
 """
 
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 from affine import Affine
+
+from ._emit_corruption import inject_into_load_raw
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -228,6 +230,7 @@ class TestATMFTotalEMIT:
     def test_at_mf_total_emit_geotensor_outputs(self, mock_emit_image):
         """Test that outputs are GeoTensors."""
         from georeader.geotensor import GeoTensor
+
         from marshsi.emit import retrieval_upv_emit as ret
 
         mf_classic, mf_extended, mf_combo, mf_filtered, rad = ret.AT_MF_total_EMIT(mock_emit_image)
@@ -338,3 +341,86 @@ class TestIntegration:
         k_arr = ret.load_target_spectrum_mf(mock_emit_image)
 
         assert len(k_arr) == len(mock_emit_image.wavelengths)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Real EMIT fixture: happy path + target spectrum
+# ─────────────────────────────────────────────────────────────────────────────
+class TestATMFTotalEMITRealFixture:
+    """AT_MF_total_EMIT on the committed plume fixture (the real read path)."""
+
+    def test_returns_five_geotensors(self, emit_image):
+        from georeader.geotensor import GeoTensor
+
+        from marshsi.emit import retrieval_upv_emit as ret
+
+        out = ret.AT_MF_total_EMIT(emit_image, georeferenced=True)
+        assert len(out) == 5
+        assert all(isinstance(o, GeoTensor) for o in out)
+        shapes = {o.shape[-2:] for o in out}
+        assert len(shapes) == 1  # all products share the spatial grid
+
+    def test_non_fill_values_finite(self, emit_image):
+        from marshsi.emit import retrieval_upv_emit as ret
+
+        mf_classic, mf_extended, *_ = ret.AT_MF_total_EMIT(emit_image, georeferenced=False)
+        for arr in (mf_classic, mf_extended):
+            valid = arr[arr != -9999]
+            assert valid.size > 0
+            assert np.all(np.isfinite(valid))
+
+    def test_extended_wmf_resolves_plume(self, emit_image):
+        """On the 350x350 fixture the extended WMF has enough column samples to
+        resolve the plume — guards against the rank-deficient regime."""
+        from marshsi.emit import retrieval_upv_emit as ret
+
+        _, mf_extended, *_ = ret.AT_MF_total_EMIT(emit_image, georeferenced=False)
+        valid = mf_extended[mf_extended != -9999]
+        assert np.percentile(valid, 99) > 0.03
+
+
+class TestLoadTargetSpectrumMFRealFixture:
+    """load_target_spectrum_mf using the fixture's real angles (from the OBS file)."""
+
+    def test_returns_finite_per_band_spectrum(self, emit_image):
+        from marshsi.emit import retrieval_upv_emit as ret
+
+        k_arr = ret.load_target_spectrum_mf(emit_image)
+        assert k_arr.shape == (emit_image.wavelengths.size,)
+        assert np.all(np.isfinite(k_arr))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NaN handling on the real EMIT scene (the wmf processor)
+# ─────────────────────────────────────────────────────────────────────────────
+class TestATMFTotalEMITNaNRealFixture:
+    """The wmf path is NaN-tolerant by design: it turns fill into NaN, drops
+    NaN rows per column and solves with ``np.linalg.pinv`` (no Cholesky). These
+    tests guard that tolerance against regressions, on the real EMIT scene.
+    """
+
+    def test_nan_pixels_handled_without_crashing(self, emit_image, monkeypatch):
+        from marshsi.emit import retrieval_upv_emit as ret
+
+        recorded = inject_into_load_raw(monkeypatch, ["nan", "nan"])
+
+        mf_classic, *_ = ret.AT_MF_total_EMIT(emit_image, georeferenced=False)
+
+        assert recorded, "load_raw was never called / no pixels corrupted"
+        # Corrupted pixels are dropped and refilled with the fill value.
+        for y, x in recorded:
+            assert mf_classic[y, x] == -9999
+
+    def test_valid_pixels_still_finite_with_nan(self, emit_image, monkeypatch):
+        from marshsi.emit import retrieval_upv_emit as ret
+
+        inject_into_load_raw(monkeypatch, ["nan", "nan"])
+
+        mf_classic, mf_extended, *_ = ret.AT_MF_total_EMIT(
+            emit_image, georeferenced=False
+        )
+
+        for arr in (mf_classic, mf_extended):
+            valid = arr[arr != -9999]
+            assert valid.size > 0
+            assert np.all(np.isfinite(valid))
