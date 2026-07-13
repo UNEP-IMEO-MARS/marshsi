@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.7](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.6...v0.1.7) (2026-07-13)
+
+
+### Bug Fixes
+
+* remove internal references and add leak-prevention guardrails ([1f37318](https://github.com/UNEP-IMEO-MARS/marshsi/commit/1f373189470f82a583255e4b034334dabe5f53fe))
+* remove internal references and add leak-prevention guardrails ([40e959f](https://github.com/UNEP-IMEO-MARS/marshsi/commit/40e959f3e02fd07628cf7611fa8bc8d897559f29))
+
 ## [0.1.6](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.5...v0.1.6) (2026-06-08)
 
 
