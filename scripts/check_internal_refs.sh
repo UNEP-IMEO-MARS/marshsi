@@ -28,7 +28,7 @@ BLOCKLIST="$HERE/.internal-blocklist"
 
 # Candidate content: drop placeholder lines, known-public hosts, and generic
 # CI/home paths so they never trip the scan.
-CANDIDATES="$(cat "$@" 2>/dev/null \
+CANDIDATES="$(cat -- "$@" 2>/dev/null \
   | grep -vE '<[A-Za-z0-9_]+>' \
   | grep -vE '(methanedata|www)\.unep\.org' \
   | grep -vE '/(home|Users)/(user|runner|runneradmin|vscode|CI)/')"
