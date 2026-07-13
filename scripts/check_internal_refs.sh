@@ -63,7 +63,7 @@ flag "absolute home path"            '(/home/[a-z0-9._-]+/|/Users/[A-Za-z0-9._-]
 if [ -f "$BLOCKLIST" ]; then
   while IFS= read -r term; do
     case "$term" in ''|\#*) continue;; esac
-    if printf '%s\n' "$CANDIDATES" | grep -Fiq "$term"; then
+    if printf '%s\n' "$CANDIDATES" | grep -Fiq -e "$term"; then
       echo "BLOCKED: possible internal identifier"
       hit=1
     fi
