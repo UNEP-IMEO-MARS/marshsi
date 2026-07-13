@@ -51,7 +51,7 @@ jobs:
           EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
         run: make test-notebooks
 
-      # Remove the label again so re-adding it re-triggers the suite (like marsml).
+      # Remove the label again so re-adding it re-triggers the suite (like the internal MARS pipeline).
       # Skipped on manual dispatch (no PR number).
       - name: Remove integration-tests label
         if: ${{ always() && github.event_name == 'pull_request' }}

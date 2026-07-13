@@ -14,10 +14,6 @@ Units assumed throughout:
 - Transmittance: Unitless [0-1]
 - Air Mass Factor (AMF): Unitless geometric factor
 
-Sentinel-2 and Landsat-8/9 notebook:
-https://wedevelop.unep.org/projects/OGMP/repos/marsml-notebooks/browse/notebooks/mlretrieval/luts_plot.ipynb
-https://wedevelop.unep.org/projects/OGMP/repos/marsml-notebooks/browse/notebooks/paper/explorelut.ipynb
-
 """
 
 import os

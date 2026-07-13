@@ -296,7 +296,7 @@ def obtain_flux_rate(
     # ueff = 0.23 * self.u10 + 0.73  # fitting at 10t/hr
     # self.q = 3600 * ueff * self.ime / np.sqrt(np.sum(plume_ind) * pix_res * pix_res)
 
-    # Conversion using Thorpe formula (see slide 9 https://unitednations.sharepoint.com/:p:/r/sites/IMEOAnalytics/Shared%20Documents/General/plume_entity_and_quantification.pptx?d=w6896cc5d6a394b19b728f07db99ca3b5&csf=1&web=1&e=bqeR5c)
+    # Conversion using the Thorpe et al. integrated-mass-enhancement (IME) formula.
     if not plume_mask_binary_values.dtype == bool:
         binary_mask = plume_mask_binary_values != 0
     else:
