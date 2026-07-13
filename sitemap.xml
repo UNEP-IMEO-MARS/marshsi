@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://UNEP-IMEO-MARS.github.io/marshsi/</loc>
+         <lastmod>2026-07-13</lastmod>
+    </url>
+    <url>
+         <loc>https://UNEP-IMEO-MARS.github.io/marshsi/emit_example/</loc>
+         <lastmod>2026-07-13</lastmod>
+    </url>
+    <url>
+         <loc>https://UNEP-IMEO-MARS.github.io/marshsi/enmap_example/</loc>
+         <lastmod>2026-07-13</lastmod>
+    </url>
+    <url>
+         <loc>https://UNEP-IMEO-MARS.github.io/marshsi/prisma_example/</loc>
+         <lastmod>2026-07-13</lastmod>
+    </url>
+</urlset>
