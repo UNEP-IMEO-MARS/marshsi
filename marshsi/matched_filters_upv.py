@@ -3,10 +3,14 @@
 # Exploiting the entire near-infrared spectral range to improve the detection of methane plumes with high-resolution imaging spectrometers, 
 # Atmos. Meas. Tech., 17, 1333–1346, https://doi.org/10.5194/amt-17-1333-2024, 2024.
 
+import logging
+
 import numpy as np
 from numpy.typing import NDArray
 
 from . import lut
+
+logger = logging.getLogger(__name__)
 
 # Import constants from lut module
 FILE_LUT_GAS = lut.FILE_LUT_GAS
@@ -195,6 +199,7 @@ def AT_MF_select_window_alt(img: NDArray, target_spectrum: NDArray) -> NDArray:
 
     Returns:
         NDArray: matching filter of shape (H, W) where H is the height and W is the width (number of columns).
+            Columns with fewer than two valid rows are left NaN.
     """
 
     H, W, B = img.shape
@@ -211,15 +216,25 @@ def AT_MF_select_window_alt(img: NDArray, target_spectrum: NDArray) -> NDArray:
 
     MF = np.full((H, W), np.nan)
 
+    skipped = 0
     for i in range(W):
         a = img[:, i, 0]
         idxs_notnan = ~np.isnan(a)
+
+        # The covariance needs two rows; with fewer, pinv fails and takes the whole image down
+        # (e.g. an all-invalid edge column or a fully masked column).
+        if idxs_notnan.sum() < 2:
+            skipped += 1
+            continue
 
         col_notnan = img[idxs_notnan, i] # (H', B)
 
         target_spectrum_i = target_spectrum[i] if len(target_spectrum.shape) == 2 else target_spectrum
         MF[idxs_notnan, i] = compute_mf_standard(col_notnan, target_spectrum_i)
-        
+
+    if skipped:
+        logger.warning(f"Matched filter skipped {skipped}/{W} columns with fewer than two valid pixels")
+
     return MF
 
 
