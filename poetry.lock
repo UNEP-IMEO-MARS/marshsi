@@ -1579,14 +1579,14 @@ dev = ["codecov", "pre-commit", "pytest (>=3.1.0)", "pytest-cov", "pytest-xdist"
 
 [[package]]
 name = "georeader-spaceml"
-version = "2.3.1"
+version = "2.4.0"
 description = "🛰️ Process raster data in python"
 optional = false
 python-versions = "<4.0,>=3.11"
 groups = ["main"]
 files = [
-    {file = "georeader_spaceml-2.3.1-py3-none-any.whl", hash = "sha256:f6af8c222819d334ab50f98a374b38349f38f4bdea1f75e6bbbfed51d67f96bd"},
-    {file = "georeader_spaceml-2.3.1.tar.gz", hash = "sha256:44916f3af2276a5327dad0ae942d15606810796b33f8451f9b4a5a23ccab5496"},
+    {file = "georeader_spaceml-2.4.0-py3-none-any.whl", hash = "sha256:fbbf3bff841585867c92b01770d841ad3bca129d88ad107e2a86a063b16d3771"},
+    {file = "georeader_spaceml-2.4.0.tar.gz", hash = "sha256:6ed1354e0a33dcbcf36d330f7403100deea40760f7fac4bb932ed20edb8eed3b"},
 ]
 
 [package.dependencies]
@@ -6480,4 +6480,4 @@ mag1c = ["spectral", "torch"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "468d34fcea91b3674622e534f52c699673ebef1ce0438d378f59077c2f2af72c"
+content-hash = "03b852cc79b3577ce8ced939fb36c18eec5bbf34b9665bef0a5eb168e8baa30e"
