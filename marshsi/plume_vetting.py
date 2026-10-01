@@ -10,7 +10,7 @@ import numpy as np
 from georeader import griddata, rasterize, read
 from georeader.geotensor import GeoTensor
 from georeader.readers import enmap, prisma
-from georeader.readers.emit import EMITImage
+from georeader.readers.emit import EMITImage, mask_band_index
 from numpy.typing import NDArray
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 # Empirical scaling from ppb-compatible LUT units to ppm·m for plume-vetting target signature.
 # See design doc §3.1. Revisit after dedicated unit validation.
 SCALE_TARGET_PPB_TO_PPMxM = 10.0
+
+# EMIT L2A mask flags OR-ed into the vetting mask when ``use_l2a_mask`` is set. Selected by
+# label because the band layout differs between mask versions (v001 vs v003).
+EMIT_L2A_MASK_FLAGS = ("Cloud flag", "Cirrus flag", "Water flag")
 
 
 def how_many_pixels_does_polygon_occupy(polygon, ref_data:GeoTensor):
@@ -424,7 +428,8 @@ def compute_emit(
         fit_wl_range: (lo, hi) wavelength window in nm for the spectral fit.
         random_seed: Seed for reproducible pixel-pair selection.
         use_l2a_mask: When True, OR the EMIT L2A cloud + surface-water mask
-            (bands 0-2) into the mask passed to :func:`compute`. Defaults to
+            (the ``EMIT_L2A_MASK_FLAGS`` bands, selected by label) into the mask
+            passed to :func:`compute`. Defaults to
             False because the EMIT L2A cloud mask is known to be unreliable
             (frequently flags real plume pixels). When False, only the
             radiance/CMF invalidity mask is applied.
@@ -514,8 +519,10 @@ def compute_emit(
     mask = rdn_invalid | cmf_invalid
 
     if use_l2a_mask:
+        mask_bands = list(emit_image.mask_bands)
+        band_index = [mask_band_index(mask_bands, name) for name in EMIT_L2A_MASK_FLAGS]
         mask_raw = np.array(emit_image.nc_ds_l2amask["mask"])
-        l2a_mask = np.sum(mask_raw[..., :3], axis=-1) > 0
+        l2a_mask = np.sum(mask_raw[..., band_index], axis=-1) > 0
         l2a_mask_geo = emit_image.georreference(l2a_mask, fill_value_default=True)
         mask = mask | l2a_mask_geo.values
 
