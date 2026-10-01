@@ -112,11 +112,12 @@ class Requirement:
 # Keyed by notebook basename (basenames are unique across docs/).
 NOTEBOOK_REQUIREMENTS: dict[str, list[Requirement]] = {
     # --- EMIT: local file or NASA Earthdata token ---------------------------
+    # Every RAD and OBS file is needed; a missing one is downloaded with the token.
     "emit_example.ipynb": [
-        Requirement(
-            files=["EMIT_L1B_RAD_001_20220827T060753_2223904_013.nc"],
-            env=["EARTHDATA_TOKEN"],
-        ),
+        Requirement(files=["EMIT_L1B_RAD_002_20220827T060753.nc"], env=["EARTHDATA_TOKEN"]),
+        Requirement(files=["EMIT_L1B_OBS_002_20220827T060753.nc"], env=["EARTHDATA_TOKEN"]),
+        Requirement(files=["EMIT_L1B_RAD_001_20220827T060753_2223904_013.nc"], env=["EARTHDATA_TOKEN"]),
+        Requirement(files=["EMIT_L1B_OBS_001_20220827T060753_2223904_013.nc"], env=["EARTHDATA_TOKEN"]),
     ],
     # --- EnMAP: local file or Azure download --------------------------------
     "enmap_example.ipynb": [
