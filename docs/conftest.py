@@ -117,6 +117,10 @@ NOTEBOOK_REQUIREMENTS: dict[str, list[Requirement]] = {
             files=["EMIT_L1B_RAD_002_20220827T060753.nc"],
             env=["EARTHDATA_TOKEN"],
         ),
+        Requirement(
+            files=["EMIT_L1B_RAD_001_20220827T060753_2223904_013.nc"],
+            env=["EARTHDATA_TOKEN"],
+        ),
     ],
     # --- EnMAP: local file or Azure download --------------------------------
     "enmap_example.ipynb": [
