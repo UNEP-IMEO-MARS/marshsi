@@ -46,6 +46,7 @@ CLASSIC_WAVELENGTH_RANGE = (2_100, 2_445)
 RAD_WAVELENGTH = 2_100
 
 # PERIODS_EXCLUDE_WATER = [(1350, 1420), (1800, 1945)]
+# Despite the name, this excludes 1260-1330 nm, not the water absorption bands of the value above.
 PERIODS_EXCLUDE_WATER = [
     (1260, 1330),
 ]
@@ -58,7 +59,7 @@ def extended_bool_wavelengths(
         wavelengths <= extended_wavelengths_range[1]
     )
 
-    # remove water absortion bands ranges: (1350-1420) and (1800, 1945)
+    # remove the excluded ranges (see PERIODS_EXCLUDE_WATER)
     for period in PERIODS_EXCLUDE_WATER:
         eb = eb & ~((wavelengths >= period[0]) & (wavelengths <= period[1]))
 

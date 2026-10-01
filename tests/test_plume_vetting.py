@@ -236,8 +236,16 @@ class TestComputeContractEnforcement:
 # ── per-sensor mask augmentation: compute_emit ─────────────────────────
 
 
+EMIT_MASK_BANDS_V001 = ["Cloud flag", "Cirrus flag", "Water flag", "Spacecraft Flag", "Dilated Cloud Flag",
+                        "AOD550", "H2O (g cm-2)", "Aggregate Flag"]
+EMIT_MASK_BANDS_V003 = ["Cloud Flag", "Cirrus Flag", "Water Flag", "Dilated Cloud Flag",
+                        "SpecTf-Cloud Probability", "SpecTf-Cloud Flag", "SpecTf-Buffer Distance"]
+
+
 def _mock_emit_image(rdn_raw: np.ndarray, wavelengths: np.ndarray, transform: Affine,
-                     crs: str, l2a_mask: np.ndarray | None = None) -> MagicMock:
+                     crs: str, l2a_mask: np.ndarray | None = None,
+                     l2a_mask_raw: np.ndarray | None = None,
+                     mask_bands: list[str] | None = None) -> MagicMock:
     """Build a MagicMock with the surface area of an EMITImage that compute_emit uses."""
     # compute_emit calls emit_image.load_raw(), then georeference(), and later
     # transposes data.values from (B, H, W) -> (H, W, B).
@@ -263,11 +271,12 @@ def _mock_emit_image(rdn_raw: np.ndarray, wavelengths: np.ndarray, transform: Af
     emit_image.georreference.side_effect = _georef
 
     if l2a_mask is not None:
-        # nc_ds_l2amask["mask"] is indexed mask_raw[..., :3] — give it 3 bands
-        # of the same boolean mask for simplicity.
-        emit_image.nc_ds_l2amask = {
-            "mask": np.stack([l2a_mask.astype(np.uint8)] * 3, axis=-1)
-        }
+        # v001 layout with the same boolean mask in every band.
+        l2a_mask_raw = np.stack([l2a_mask.astype(np.uint8)] * len(EMIT_MASK_BANDS_V001), axis=-1)
+        mask_bands = EMIT_MASK_BANDS_V001
+    if l2a_mask_raw is not None:
+        emit_image.nc_ds_l2amask = {"mask": l2a_mask_raw}
+        emit_image.mask_bands = np.array(mask_bands)
     return emit_image
 
 
@@ -403,3 +412,48 @@ class TestComputeEmitMaskAugmentation:
         assert not mask[0, 0]
         # Extra georreference call occurs for the L2A cloud mask when enabled.
         assert emit_image.georreference.call_count == 2
+
+    def test_use_l2a_mask_selects_flags_by_label_on_v003(self, monkeypatch):
+        captured = self._patch_compute(monkeypatch)
+        self._patch_target_signature(monkeypatch)
+
+        h, w, b = 12, 12, 50
+        rdn = np.ones((h, w, b))
+        transform = Affine(60.0, 0.0, 500000.0, 0.0, -60.0, 4000000.0)
+        crs = "EPSG:32610"
+        cmf = GeoTensor(np.zeros((h, w), dtype=np.float32),
+                        transform=transform, crs=crs, fill_value_default=-9999.0)
+
+        # One pixel per v003 band. Only Cloud, Cirrus and Water may reach the mask; the
+        # Dilated Cloud flag (index 3, where v001 had Spacecraft) and the continuous
+        # SpecTf-Cloud Probability (index 4, where v001 had Dilated Cloud) must not.
+        l2a_mask_raw = np.zeros((h, w, len(EMIT_MASK_BANDS_V003)), dtype=np.float32)
+        for band in range(len(EMIT_MASK_BANDS_V003)):
+            l2a_mask_raw[band, band, band] = 0.7 if band == 4 else 1
+        emit_image = _mock_emit_image(rdn, np.linspace(400, 2500, b), transform, crs,
+                                       l2a_mask_raw=l2a_mask_raw, mask_bands=EMIT_MASK_BANDS_V003)
+
+        pv.compute_emit(emit_image, cmf, polygons=[], use_l2a_mask=True)
+        mask = captured["clouds_and_surface_water_mask"]
+        assert [bool(mask[i, i]) for i in range(len(EMIT_MASK_BANDS_V003))] == [
+            True, True, True, False, False, False, False
+        ]
+        assert mask.sum() == 3
+
+    def test_use_l2a_mask_missing_flag_raises(self, monkeypatch):
+        self._patch_compute(monkeypatch)
+        self._patch_target_signature(monkeypatch)
+
+        h, w, b = 6, 6, 50
+        rdn = np.ones((h, w, b))
+        transform = Affine(60.0, 0.0, 500000.0, 0.0, -60.0, 4000000.0)
+        crs = "EPSG:32610"
+        cmf = GeoTensor(np.zeros((h, w), dtype=np.float32),
+                        transform=transform, crs=crs, fill_value_default=-9999.0)
+
+        emit_image = _mock_emit_image(rdn, np.linspace(400, 2500, b), transform, crs,
+                                       l2a_mask_raw=np.zeros((h, w, 2), dtype=np.uint8),
+                                       mask_bands=["Cloud Flag", "Cirrus Flag"])
+
+        with pytest.raises(ValueError, match="Water flag"):
+            pv.compute_emit(emit_image, cmf, polygons=[], use_l2a_mask=True)

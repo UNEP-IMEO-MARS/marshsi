@@ -18,7 +18,7 @@ include = ["marshsi/output_Tch4_LUT_AMF_VZA_0_v2.nc",
 python = ">=3.12,<4.0"
 rasterio = ">=1"
 numpy = ">=1"
-georeader-spaceml = ">=1.5.12"
+georeader-spaceml = ">=2.4.0,<3.0"
 h5py = ">=3"
 scipy = ">=1.15"
 tqdm = ">=4"
