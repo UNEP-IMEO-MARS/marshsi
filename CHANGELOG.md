@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.8](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.7...v0.1.8) (2026-10-01)
+
+
+### Bug Fixes
+
+* **emit:** select the L2A mask flags by label for EMIT v002 readiness ([#16](https://github.com/UNEP-IMEO-MARS/marshsi/issues/16)) ([f8cc19a](https://github.com/UNEP-IMEO-MARS/marshsi/commit/f8cc19a4966b53741962c7f73c10eba92c11165f))
+
+
+### Documentation
+
+* **emit:** show the EMIT example on both v001 and v002 ([#18](https://github.com/UNEP-IMEO-MARS/marshsi/issues/18)) ([3759307](https://github.com/UNEP-IMEO-MARS/marshsi/commit/37593076020a85957c727efdadba1dde6f345916))
+
 ## [0.1.7](https://github.com/UNEP-IMEO-MARS/marshsi/compare/v0.1.6...v0.1.7) (2026-07-13)
 
 
