@@ -114,7 +114,7 @@ NOTEBOOK_REQUIREMENTS: dict[str, list[Requirement]] = {
     # --- EMIT: local file or NASA Earthdata token ---------------------------
     "emit_example.ipynb": [
         Requirement(
-            files=["EMIT_L1B_RAD_001_20220827T060753_2223904_013.nc"],
+            files=["EMIT_L1B_RAD_002_20220827T060753.nc"],
             env=["EARTHDATA_TOKEN"],
         ),
     ],
